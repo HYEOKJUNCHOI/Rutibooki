@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0A0A0A;
+  --bg-elev: #121212;
+  --bg-card: #161616;
+  --line: #1F1F1F;
+  --text: #E8E8E8;
+  --text-dim: #8A8A8A;
+  --text-mute: #5A5A5A;
+  --matrix: #00FF7A;
+  --matrix-dim: #00B858;
+  --cyan: #00E5FF;
+  --cyan-dim: #008CA8;
+  --warn: #FFB547;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-card: var(--bg-card);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-mute: var(--text-mute);
+  --color-matrix: var(--matrix);
+  --color-matrix-dim: var(--matrix-dim);
+  --color-cyan: var(--cyan);
+  --color-cyan-dim: var(--cyan-dim);
+  --color-warn: var(--warn);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Matrix glow utilities */
+.glow-matrix {
+  box-shadow: 0 0 12px rgba(0, 255, 122, 0.4);
+}
+.glow-cyan {
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+}
+.text-glow-matrix {
+  text-shadow: 0 0 8px rgba(0, 255, 122, 0.6);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }

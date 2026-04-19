@@ -29,22 +29,12 @@ export default function Home() {
     useReadingStore.persist.rehydrate();
   }, []);
 
-  // T-32, T-46: 라우팅 플로우 최종화.
-  //   1) 첫 방문 → /onboarding
-  //   2) 온보딩 본 뒤 읽을 책이 하나도 없으면 → /register (강제 아닌 유도)
-  // books 목업이 비어있는 극단 상황만 방어. 현재 시드는 7권이라 대부분 fallthrough.
+  // 온보딩 자동 노출은 일단 비활성화 — 홈이 바로 뜬다.
+  // 다시 켜려면 아래 블록 복구 + ONBOARD_FLAG_KEY 체크 되돌리면 됨.
+  // 온보딩 자체는 /onboarding 라우트와 Settings "온보딩 다시보기"로 여전히 접근 가능.
   useEffect(() => {
-    try {
-      const seen = window.localStorage.getItem(ONBOARD_FLAG_KEY);
-      if (!seen) {
-        router.replace("/onboarding");
-        return;
-      }
-      if (books.length === 0) {
-        router.replace("/register");
-      }
-    } catch {
-      // 접근 실패 시 홈 유지.
+    if (books.length === 0) {
+      router.replace("/register");
     }
   }, [router]);
 

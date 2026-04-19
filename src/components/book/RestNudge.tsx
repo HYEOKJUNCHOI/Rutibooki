@@ -96,7 +96,7 @@ export default function RestNudge({ nudge, onClose }: RestNudgeProps) {
               letterSpacing: "-0.3px",
             }}
           >
-            그래도 읽을게요
+            좋아요, 읽을게요
           </button>
           <button
             onClick={handleClose}

@@ -11,8 +11,12 @@ export function useVisibilityChange(opts: {
 }) {
   const hiddenAtRef = useRef<number | null>(null);
   const minAwayMs = opts.minAwayMs ?? ABSENCE_MIN_AWAY_MS;
+  // onReturn 최신 값을 ref 로 stable binding. 렌더 중 ref 업데이트는 린트 위반이라
+  // effect 에서 동기화한다.
   const onReturnRef = useRef(opts.onReturn);
-  onReturnRef.current = opts.onReturn;
+  useEffect(() => {
+    onReturnRef.current = opts.onReturn;
+  }, [opts.onReturn]);
 
   useEffect(() => {
     if (!opts.enabled) return;

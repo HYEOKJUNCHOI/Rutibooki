@@ -14,8 +14,12 @@ export function useLongPress(
   const [progress, setProgress] = useState(0);
   const startRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  // onComplete 가 바뀌어도 최신 값을 참조하도록 ref 로 stable binding.
+  // ref 업데이트는 렌더 중이 아니라 effect 안에서 — react-hooks/refs 린트 규칙 준수.
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const cancel = useCallback(() => {
     startRef.current = null;

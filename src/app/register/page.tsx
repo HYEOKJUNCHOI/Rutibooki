@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import RegisterSlot from "@/components/register/RegisterSlot";
@@ -58,6 +58,8 @@ export default function RegisterPage() {
   } = useRegisterFlow();
 
   const addBook = useBooksStore((s) => s.addBook);
+  // 저장 진행 중 플래그 — 버튼 연타로 인한 addBook 중복 호출 방지.
+  const [saving, setSaving] = useState(false);
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
 
   // 숨겨진 file input 을 버튼 클릭으로 트리거. capture="environment" 는 모바일에서 후면 카메라.
@@ -82,9 +84,10 @@ export default function RegisterPage() {
       hasTocImage &&
       state.title.trim().length > 0 &&
       !state.extracting &&
-      !state.coverExtracting
+      !state.coverExtracting &&
+      !saving
     );
-  }, [state]);
+  }, [state, saving]);
 
   const canExtract = useMemo(() => {
     return (
@@ -94,35 +97,45 @@ export default function RegisterPage() {
   }, [state.tocSlots, state.extracting]);
 
   const handleSave = async () => {
-    // 목차 추출이 아직이면 먼저 실행 (한 번의 탭으로 "추출 → 저장" 연속 진행).
-    let parts = state.tocResult?.parts ?? [];
-    let totalPages = state.tocResult?.totalPages ?? 0;
+    // 버튼 연타 방지 — async 도중 다시 눌려도 중복 addBook 이 일어나지 않게.
+    if (saving) return;
+    setSaving(true);
+    try {
+      // 목차 추출이 아직이면 먼저 실행 (한 번의 탭으로 "추출 → 저장" 연속 진행).
+      let parts = state.tocResult?.parts ?? [];
+      let totalPages = state.tocResult?.totalPages ?? 0;
 
-    if (parts.length === 0) {
-      const result = await extractToc();
-      if (!result || result.parts.length === 0) return;
-      parts = result.parts;
-      totalPages = result.totalPages ?? parts.at(-1)?.endPage ?? 0;
-    } else if (totalPages <= 0) {
-      totalPages = parts.at(-1)?.endPage ?? 0;
+      if (parts.length === 0) {
+        const result = await extractToc();
+        if (!result || result.parts.length === 0) return;
+        parts = result.parts;
+        totalPages = result.totalPages ?? parts.at(-1)?.endPage ?? 0;
+      } else if (totalPages <= 0) {
+        totalPages = parts.at(-1)?.endPage ?? 0;
+      }
+
+      if (totalPages <= 0 || parts.length === 0) return;
+
+      const id = slugify(state.title) || `book-${Date.now()}`;
+      const book: Book = {
+        id,
+        title: state.title.trim(),
+        author: state.author.trim(),
+        searchQuery: `${state.title} ${state.author}`.trim(),
+        // 사용자가 업로드한 cover 의 previewUrl 은 blob: URL 이라 세션/기기 간 깨짐.
+        // 영속성 위해 네이버 공개 URL 만 저장. 사용자가 바꾼 표지가 있더라도 다음
+        // 세션부터는 title 기반 네이버 재검색이 useBookCovers 훅에서 자동 복구.
+        coverUrl: state.naverCoverUrl ?? undefined,
+        totalPages,
+        parts,
+        registeredAt: new Date().toISOString(),
+      };
+
+      addBook(book);
+      router.replace("/");
+    } finally {
+      setSaving(false);
     }
-
-    if (totalPages <= 0 || parts.length === 0) return;
-
-    const id = slugify(state.title) || `book-${Date.now()}`;
-    const book: Book = {
-      id,
-      title: state.title.trim(),
-      author: state.author.trim(),
-      searchQuery: `${state.title} ${state.author}`.trim(),
-      coverUrl: state.cover?.previewUrl ?? state.naverCoverUrl ?? undefined,
-      totalPages,
-      parts,
-      registeredAt: new Date().toISOString(),
-    };
-
-    addBook(book);
-    router.replace("/");
   };
 
   return (
@@ -389,7 +402,11 @@ export default function RegisterPage() {
             letterSpacing: "-0.3px",
           }}
         >
-          {state.extracting ? "목차 분석 중…" : "등록 완료"}
+          {saving
+            ? "저장 중…"
+            : state.extracting
+              ? "목차 분석 중…"
+              : "등록 완료"}
         </button>
       </PhoneFrame>
     </main>

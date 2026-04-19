@@ -12,10 +12,7 @@ export function useNickname(): string | null {
   const [nickname, setNickname] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      setNickname(null);
-      return;
-    }
+    if (!user) return;
     let alive = true;
     getUserProfile(user.uid)
       .then((p) => {
@@ -26,6 +23,8 @@ export function useNickname(): string | null {
       .catch((err) => console.warn("[useNickname]", err));
     return () => {
       alive = false;
+      // 유저가 바뀌거나 로그아웃하면 이전 유저 닉네임이 새 세션으로 새지 않도록 리셋.
+      setNickname(null);
     };
   }, [user]);
 

@@ -58,13 +58,17 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // 키는 쿼리스트링 대신 헤더로 — 서버 액세스로그/프록시 캐시에 키가 남지 않게.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
 
   let r: Response;
   try {
     r = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify(reqBody),
     });
   } catch (err) {

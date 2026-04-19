@@ -22,7 +22,9 @@ export function useWakeLock(enabled: boolean) {
       wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
     };
     if (!anyNav.wakeLock) {
-      setFailed(true);
+      // 동기 setState 는 react-hooks/set-state-in-effect 위반 → 다음 tick 으로 미룬다.
+      // 미지원 여부는 즉시성이 중요하지 않아 microtask 로 충분.
+      queueMicrotask(() => setFailed(true));
       return;
     }
 

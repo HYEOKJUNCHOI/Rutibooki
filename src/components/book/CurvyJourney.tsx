@@ -68,6 +68,9 @@ function approxPathLength(points: { x: number; y: number }[]): number {
 }
 
 export default function CurvyJourney({ book, currentPage }: CurvyJourneyProps) {
+  // 파트 정보가 없으면 waypoint 계산이 1/0 = Infinity 로 터진다 → 조기 return.
+  if (!book.parts || book.parts.length === 0) return null;
+
   const parts = book.parts;
   const partCount = parts.length;
 

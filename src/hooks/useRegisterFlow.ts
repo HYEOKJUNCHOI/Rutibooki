@@ -247,10 +247,12 @@ export function useRegisterFlow() {
         coverExtractError: null,
       }));
 
-      // 2) File → base64 data URL 변환.
+      // 2) File → 리사이즈 + base64 data URL 변환.
+      // Gemini Vision 에 원본 해상도(수 MB)를 보내면 네트워크·비용 낭비.
+      // 표지/목차 텍스트 인식에는 longest edge 1200px 로 충분.
       let dataUrl: string;
       try {
-        dataUrl = await fileToDataUrl(file);
+        dataUrl = await fileToResizedDataUrl(file, 1200);
       } catch (e) {
         setState((s) => ({
           ...s,
@@ -329,6 +331,49 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("read_failed"));
     reader.readAsDataURL(file);
   });
+}
+
+// File → canvas 리사이즈 → JPEG data URL. longest edge 가 maxEdge 이하가 되도록 축소.
+// 이미 충분히 작으면 원본을 그대로 data URL 로 반환(재인코딩으로 화질 떨어지는 것 방지).
+async function fileToResizedDataUrl(
+  file: File,
+  maxEdge: number,
+): Promise<string> {
+  // 브라우저 외 환경(SSR·테스트) 안전 장치.
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    return fileToDataUrl(file);
+  }
+
+  const originalUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("image_load_failed"));
+      el.src = originalUrl;
+    });
+
+    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    if (longest <= maxEdge) {
+      // 리사이즈 불필요 → 원본 data URL 그대로 반환.
+      return await fileToDataUrl(file);
+    }
+
+    const scale = maxEdge / longest;
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return await fileToDataUrl(file);
+    ctx.drawImage(img, 0, 0, w, h);
+    // JPEG 품질 0.85 — OCR/라벨 인식에 충분하면서 용량은 1/5~1/10 수준.
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(originalUrl);
+  }
 }
 
 function markTocStatus(

@@ -73,13 +73,6 @@ export async function markOnboarded(uid: string): Promise<void> {
   });
 }
 
-// 온보딩 다시보기 — null 로 리셋.
-export async function resetOnboarded(uid: string): Promise<void> {
-  await updateDoc(userDoc(uid), {
-    "profile.onboardedAt": null,
-  });
-}
-
 // 닉네임 저장 — 빈 문자열이면 null 로 정리해서 fallback 조건을 단순화.
 export async function updateNickname(uid: string, nickname: string): Promise<void> {
   const trimmed = nickname.trim();

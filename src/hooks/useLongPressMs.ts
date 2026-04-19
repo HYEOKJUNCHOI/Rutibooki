@@ -11,13 +11,12 @@ import { LONG_PRESS_MS } from "@/constants/reading";
 
 export function useLongPressMs(): number {
   const { user } = useAuth();
+  // user 가 없을 때의 기본값은 state 초기값으로 처리 → effect 조기 return 경로에서
+  // 불필요한 setState 가 사라져 react-hooks/set-state-in-effect 규칙 준수.
   const [ms, setMs] = useState<number>(LONG_PRESS_MS);
 
   useEffect(() => {
-    if (!user) {
-      setMs(LONG_PRESS_MS);
-      return;
-    }
+    if (!user) return;
     let alive = true;
     getUserProfile(user.uid)
       .then((p) => {
@@ -29,6 +28,8 @@ export function useLongPressMs(): number {
       .catch((err) => console.warn("[useLongPressMs]", err));
     return () => {
       alive = false;
+      // 로그아웃·유저 변경 시 이전 유저 값이 새 유저로 잠깐 누수되지 않도록 기본값으로 복귀.
+      setMs(LONG_PRESS_MS);
     };
   }, [user]);
 

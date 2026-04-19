@@ -40,6 +40,9 @@ export interface RegisterFlowState {
   tocError: string | null;
   // 지금 목차 추출 진행 중인지
   extracting: boolean;
+  // 표지 메타 추출 진행 중인지 (Gemini Vision)
+  coverExtracting: boolean;
+  coverExtractError: string | null;
 }
 
 export function useRegisterFlow() {
@@ -53,6 +56,8 @@ export function useRegisterFlow() {
     tocResult: null,
     tocError: null,
     extracting: false,
+    coverExtracting: false,
+    coverExtractError: null,
   });
 
   // 언마운트 시 object URL 정리 — 누수 방지.
@@ -162,13 +167,15 @@ export function useRegisterFlow() {
   }, [state.title]);
 
   // 목차 사진 Vision 추출. 3회 retry with backoff.
-  const extractToc = useCallback(async () => {
+  // 반환값: 성공 시 TocResult, 실패 시 null.
+  // handleSave 가 한 번의 탭으로 "추출 → 저장" 을 이어가기 위해 stale state 우회용 반환값 필요.
+  const extractToc = useCallback(async (): Promise<TocResult | null> => {
     const files: File[] = [];
     for (const k of TOC_SLOT_KEYS) {
       const slot = state.tocSlots[k];
       if (slot) files.push(slot.file);
     }
-    if (files.length === 0) return;
+    if (files.length === 0) return null;
 
     setState((s) => ({
       ...s,
@@ -198,18 +205,19 @@ export function useRegisterFlow() {
           await wait(500 * (attempt + 1));
           continue;
         }
+        const result: TocResult = {
+          parts: (data.parts ?? []) as BookPart[],
+          totalPages: data.totalPages,
+          confidence: data.confidence,
+          warning: data.warning,
+        };
         setState((s) => ({
           ...s,
           extracting: false,
-          tocResult: {
-            parts: (data.parts ?? []) as BookPart[],
-            totalPages: data.totalPages,
-            confidence: data.confidence,
-            warning: data.warning,
-          },
+          tocResult: result,
           tocSlots: markTocStatus(s.tocSlots, "done"),
         }));
-        return;
+        return result;
       } catch (e) {
         lastError = (e as Error).message;
       }
@@ -222,7 +230,77 @@ export function useRegisterFlow() {
       tocError: lastError || "unknown",
       tocSlots: markTocStatus(s.tocSlots, "error"),
     }));
+    return null;
   }, [state.tocSlots]);
+
+  // 표지 이미지 → Gemini Vision → 제목/저자 자동 채움.
+  // title 이 바뀌면 기존 effect 가 네이버 표지 자동 검색을 트리거한다.
+  const extractCoverFromImage = useCallback(
+    async (file: File) => {
+      // 1) 업로드된 파일 자체는 cover 슬롯에 먼저 넣는다 (사용자 피드백용).
+      const previewUrl = track(URL.createObjectURL(file));
+      setState((s) => ({
+        ...s,
+        cover: { file, previewUrl, status: "uploading" },
+        coverStatus: "uploading",
+        coverExtracting: true,
+        coverExtractError: null,
+      }));
+
+      // 2) File → base64 data URL 변환.
+      let dataUrl: string;
+      try {
+        dataUrl = await fileToDataUrl(file);
+      } catch (e) {
+        setState((s) => ({
+          ...s,
+          coverExtracting: false,
+          coverExtractError: (e as Error).message || "read_failed",
+          coverStatus: "done",
+          cover: s.cover ? { ...s.cover, status: "done" } : null,
+        }));
+        return;
+      }
+
+      // 3) API 호출.
+      try {
+        const r = await fetch("/api/extract-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          throw new Error(data?.error || `status ${r.status}`);
+        }
+        const data = await r.json();
+        const extractedTitle =
+          typeof data.title === "string" ? data.title.trim() : "";
+        const extractedAuthor =
+          typeof data.author === "string" ? data.author.trim() : "";
+
+        setState((s) => ({
+          ...s,
+          coverExtracting: false,
+          coverExtractError: null,
+          coverStatus: "done",
+          cover: s.cover ? { ...s.cover, status: "done" } : null,
+          // 사용자가 이미 입력한 값은 덮지 않음.
+          title: s.title || extractedTitle,
+          author: s.author || extractedAuthor,
+        }));
+      } catch (e) {
+        setState((s) => ({
+          ...s,
+          coverExtracting: false,
+          coverExtractError: (e as Error).message || "extract_failed",
+          coverStatus: "done",
+          cover: s.cover ? { ...s.cover, status: "done" } : null,
+        }));
+      }
+    },
+    [track],
+  );
 
   return {
     state,
@@ -233,9 +311,24 @@ export function useRegisterFlow() {
     setTitle,
     setAuthor,
     extractToc,
+    extractCoverFromImage,
     overrideParts,
     overrideTotalPages,
   };
+}
+
+// File → base64 data URL. FileReader 래핑.
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") resolve(result);
+      else reject(new Error("read_not_string"));
+    };
+    reader.onerror = () => reject(new Error("read_failed"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function markTocStatus(

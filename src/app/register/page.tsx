@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import RegisterSlot from "@/components/register/RegisterSlot";
@@ -52,6 +52,7 @@ export default function RegisterPage() {
     setTitle,
     setAuthor,
     extractToc,
+    extractCoverFromImage,
     overrideParts,
     overrideTotalPages,
   } = useRegisterFlow();
@@ -59,25 +60,29 @@ export default function RegisterPage() {
   const addBook = useBooksStore((s) => s.addBook);
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
 
-  // (#4) 표지 촬영 → Vision → 네이버 검색 연동은 외부 API 키 필요해서 UI 껍데기만.
-  // 3초 후 자동 사라지는 토스트로 "곧 열어둘게요" 메시지.
-  const [scanToast, setScanToast] = useState(false);
-  const handleScanCover = () => {
-    setScanToast(true);
-    window.setTimeout(() => setScanToast(false), 2500);
+  // 숨겨진 file input 을 버튼 클릭으로 트리거. capture="environment" 는 모바일에서 후면 카메라.
+  const coverScanInputRef = useRef<HTMLInputElement | null>(null);
+  const handleScanCoverClick = () => {
+    coverScanInputRef.current?.click();
+  };
+  const handleScanCoverPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) extractCoverFromImage(f);
+    // 같은 파일을 다시 선택해도 change 가 발화되도록 초기화.
+    e.target.value = "";
   };
 
-  // 필수 2슬롯 + 제목이 있어야 등록 완료 가능.
+  // 필수 슬롯 + 제목이 있어야 등록 완료 가능.
+  // hasParts 는 등록 시점에 자동 추출로 채워지므로 활성화 조건에서는 제외.
   const canSave = useMemo(() => {
     const hasCover = state.cover !== null || state.naverCoverUrl !== null;
     const hasTocImage = TOC_SLOT_KEYS.some((k) => state.tocSlots[k] !== null);
-    const hasParts = (state.tocResult?.parts.length ?? 0) > 0;
     return (
       hasCover &&
       hasTocImage &&
-      hasParts &&
       state.title.trim().length > 0 &&
-      !state.extracting
+      !state.extracting &&
+      !state.coverExtracting
     );
   }, [state]);
 
@@ -88,12 +93,20 @@ export default function RegisterPage() {
     );
   }, [state.tocSlots, state.extracting]);
 
-  const handleSave = () => {
-    const parts = state.tocResult?.parts ?? [];
-    // totalPages 추정: 1) editor 수정값 2) Vision 응답 3) 마지막 파트 endPage
-    const lastPageFromParts = parts.at(-1)?.endPage ?? 0;
-    const totalPages =
-      state.tocResult?.totalPages ?? lastPageFromParts ?? 0;
+  const handleSave = async () => {
+    // 목차 추출이 아직이면 먼저 실행 (한 번의 탭으로 "추출 → 저장" 연속 진행).
+    let parts = state.tocResult?.parts ?? [];
+    let totalPages = state.tocResult?.totalPages ?? 0;
+
+    if (parts.length === 0) {
+      const result = await extractToc();
+      if (!result || result.parts.length === 0) return;
+      parts = result.parts;
+      totalPages = result.totalPages ?? parts.at(-1)?.endPage ?? 0;
+    } else if (totalPages <= 0) {
+      totalPages = parts.at(-1)?.endPage ?? 0;
+    }
+
     if (totalPages <= 0 || parts.length === 0) return;
 
     const id = slugify(state.title) || `book-${Date.now()}`;
@@ -202,26 +215,49 @@ export default function RegisterPage() {
               </p>
             )}
 
-            {/* (#4) 표지 촬영 — Vision/네이버 연동 전 UI 껍데기. */}
+            {/* 표지 촬영 → Gemini Vision → 제목/저자 자동 채움. */}
+            <input
+              ref={coverScanInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleScanCoverPick}
+              style={{ display: "none" }}
+            />
             <button
               type="button"
-              onClick={handleScanCover}
+              onClick={handleScanCoverClick}
+              disabled={state.coverExtracting}
               style={{
                 marginTop: 10,
                 width: "100%",
                 background: "transparent",
-                color: "#8A8A8A",
+                color: state.coverExtracting ? "#5A5A5A" : "#8A8A8A",
                 border: "1px dashed #2A2A2A",
                 borderRadius: 10,
                 padding: "10px",
                 fontSize: 12,
-                cursor: "pointer",
+                cursor: state.coverExtracting ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
                 letterSpacing: "-0.2px",
               }}
             >
-              📸 표지 촬영으로 찾기
+              {state.coverExtracting
+                ? "표지 인식 중…"
+                : "📸 표지 촬영으로 찾기"}
             </button>
+            {state.coverExtractError && (
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "#7A3A3A",
+                  marginTop: 8,
+                  letterSpacing: "-0.2px",
+                }}
+              >
+                표지 인식 실패 — 다시 시도해 주세요.
+              </p>
+            )}
           </section>
 
           {/* 제목/저자 */}
@@ -353,32 +389,8 @@ export default function RegisterPage() {
             letterSpacing: "-0.3px",
           }}
         >
-          등록 완료
+          {state.extracting ? "목차 분석 중…" : "등록 완료"}
         </button>
-
-        {/* (#4) 곧 열어둘 기능 안내 토스트 — 화면 하단 중앙, 자동 사라짐. */}
-        {scanToast && (
-          <div
-            role="status"
-            style={{
-              position: "absolute",
-              bottom: 100,
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "#111",
-              color: "#E8E8E8",
-              border: "1px solid #2A4A3A",
-              borderRadius: 999,
-              padding: "8px 14px",
-              fontSize: 12,
-              letterSpacing: "-0.2px",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            곧 열어둘게요 📸
-          </div>
-        )}
       </PhoneFrame>
     </main>
   );

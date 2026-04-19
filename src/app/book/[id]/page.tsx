@@ -9,7 +9,7 @@ import { formatDateShort, getDayLabel } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import TodayCard from "@/components/book/TodayCard";
-import FullJourney from "@/components/book/FullJourney";
+import CurvyJourney from "@/components/book/CurvyJourney";
 import RestNudge from "@/components/book/RestNudge";
 import { useBookState } from "@/store/selectors";
 import { getNudge } from "@/data/nudges";
@@ -68,14 +68,14 @@ export default function BookDetailPage({
 
   return (
     <main
-      style={{ background: "#050505", minHeight: "100vh" }}
+      style={{ background: "#050505", minHeight: "100vh", overflow: "hidden" }}
       className="flex flex-col items-center justify-center px-6 py-12"
     >
       <PhoneFrame>
         {/* 헤더 — 서재로 돌아가기 ← · 날짜 · 쉬어가기 */}
         <div
           style={{
-            marginBottom: 16,
+            marginBottom: 12,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -139,8 +139,8 @@ export default function BookDetailPage({
 
         <TodayCard book={selectedBook} />
 
-        {/* 대제목·소제목 전체 여정 — 심심한 빈 공간 대신 "이 책 전체 지도" 제공. */}
-        <FullJourney book={selectedBook} currentPage={currentPage} />
+        {/* 보물지도 스타일 여정 — S-curve bezier로 파트 노드를 연결. FullJourney 세로 스크롤 유발 문제를 해결. */}
+        <CurvyJourney book={selectedBook} currentPage={currentPage} />
 
         <button
           onClick={handleOpenBook}

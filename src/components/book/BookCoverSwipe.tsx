@@ -1,5 +1,10 @@
 "use client";
 
+// 책 표지는 네이버 외부 URL(도메인이 책마다 다를 수 있음) 이라 next/image 로 전환하면
+// remotePatterns 누락 시 즉시 깨짐. 또한 3D 플리퍼 내부에서 height:100% 기반 유동
+// 레이아웃이라 명시적 width/height 지정이 어려움. 의도적으로 <img> 유지.
+/* eslint-disable @next/next/no-img-element */
+
 import { useRef, useState } from "react";
 import { Book } from "@/types/book";
 import { getActivePart } from "@/utils/reading";

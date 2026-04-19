@@ -10,7 +10,8 @@ interface LibraryCardProps {
   onClick: () => void;
 }
 
-// 서재 카드 — 표지 썸네일 + 제목·저자 + 진행 바(숫자 없음, 회의록 D 헌법).
+// 서재 카드 — 작은 책 사이즈(약 64×86). 제목은 표지 하단 띠지 오버레이.
+// 진행도는 좌측 얇은 초록 막대로만 (숫자 X, 헌법 D).
 export default function LibraryCard({ book, cover, onClick }: LibraryCardProps) {
   const state = useBookState(book.id);
   const progress = calcProgress(state?.currentPage ?? 0, book.totalPages);
@@ -18,91 +19,87 @@ export default function LibraryCard({ book, cover, onClick }: LibraryCardProps) 
   return (
     <button
       onClick={onClick}
+      aria-label={book.title}
       style={{
-        background: "transparent",
-        border: "none",
+        position: "relative",
+        width: 64,
+        height: 86,
         padding: 0,
+        background: "#161616",
+        border: "1px solid #1A1A1A",
+        borderRadius: 5,
         cursor: "pointer",
+        overflow: "hidden",
         fontFamily: "inherit",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        textAlign: "left",
+        flexShrink: 0,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
       }}
     >
-      {/* 표지 영역 — 3:4 비율, 없으면 플레이스홀더 */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          aspectRatio: "3 / 4",
-          background: "#0E0E0E",
-          border: "1px solid #1A1A1A",
-          borderRadius: 8,
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {cover ? (
-          // Next/Image는 외부 도메인 설정 부담이 커서 MVP에선 <img>. 썸네일이라 퍼포먼스 영향 적음.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={cover}
-            alt={book.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        ) : (
-          <span
-            style={{
-              fontSize: 10,
-              color: "#3A3A3A",
-              padding: "0 6px",
-              textAlign: "center",
-              letterSpacing: "-0.2px",
-            }}
-          >
-            {book.title}
-          </span>
-        )}
-      </div>
+      {cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cover}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 8,
+            color: "#5A5A5A",
+            padding: 4,
+            lineHeight: 1.3,
+            textAlign: "center",
+          }}
+        >
+          {book.title.slice(0, 8)}
+        </div>
+      )}
 
-      {/* 제목 — 1줄 ellipsis */}
+      {/* 제목 띠지 — 하단 가로, 어두운 반투명 배경에 흰 글자 1줄 ellipsis */}
       <div
         style={{
-          fontSize: 12,
-          color: "#E8E8E8",
-          fontWeight: 600,
-          letterSpacing: "-0.3px",
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: "3px 5px",
+          background: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 60%)",
+          color: "#F0F0F0",
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: "-0.2px",
           whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
+          textShadow: "0 1px 2px rgba(0,0,0,0.9)",
+          textAlign: "left",
         }}
       >
         {book.title}
       </div>
 
-      {/* 진행 바 — 숫자 없음. 색 진하기로만 상태 표현(헌법 D). */}
-      <div
-        style={{
-          width: "100%",
-          height: 3,
-          background: "#1A1A1A",
-          borderRadius: 2,
-          overflow: "hidden",
-        }}
-      >
+      {/* 진행도 — 좌측 세로 얇은 초록 막대(숫자 없음) */}
+      {progress > 0 && (
         <div
           style={{
-            height: "100%",
-            width: `${progress}%`,
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 2,
             background: "#00FF7A",
-            opacity: progress > 0 ? 0.85 : 0,
-            transition: "width 0.4s ease",
+            opacity: 0.9,
+            transform: `scaleY(${progress / 100})`,
+            transformOrigin: "top",
           }}
         />
-      </div>
+      )}
     </button>
   );
 }

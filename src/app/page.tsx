@@ -123,11 +123,13 @@ export default function LibraryHome() {
               <br />첫 책을 등록해볼까요?
             </div>
           ) : (
+            // 책장 느낌 — flex-wrap 으로 여러 줄, 자연스럽게 흩뿌려진 배치. 선반 구분선은 V2.
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 14,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                rowGap: 16,
               }}
             >
               {sortedBooks.map((book, idx) => (

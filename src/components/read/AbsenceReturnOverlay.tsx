@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Book } from "@/types/book";
 import { useLongPress } from "@/hooks/useLongPress";
-import { getActivePart, formatPartLabel } from "@/utils/reading";
+import { getActivePart, getActiveSection } from "@/utils/reading";
 import JourneyPath from "@/components/book/JourneyPath";
 import LongPressRing from "./LongPressRing";
 
@@ -27,6 +27,15 @@ export default function AbsenceReturnOverlay({
 }: AbsenceReturnOverlayProps) {
   const [opacity, setOpacity] = useState(0);
   const part = getActivePart(book, currentPage || 1);
+  const section = getActiveSection(book, currentPage || 1);
+  const sections = part.sections;
+  // 현재 파트 안의 섹션 진행 — 읽는 중에는 소제목 기준이 더 와닿는다.
+  const currentSectionIdx = Math.max(
+    0,
+    sections.findIndex(
+      (s) => s.startPage === section.startPage && s.endPage === section.endPage,
+    ),
+  );
   const stopLong = useLongPress(onStopToday, { haptic: true });
 
   useEffect(() => {
@@ -58,17 +67,18 @@ export default function AbsenceReturnOverlay({
         <p
           style={{
             fontSize: 12,
-            color: "#5A5A5A",
+            color: "#9A9A9A",
             textAlign: "center",
             letterSpacing: "-0.3px",
             marginBottom: 8,
           }}
         >
-          {formatPartLabel(part.index)}
+          {part.title}
         </p>
         <JourneyPath
-          totalParts={book.parts.length}
-          currentPart={part.index}
+          totalParts={sections.length}
+          currentPart={currentSectionIdx + 1}
+          labels={sections.map((s) => s.title)}
         />
       </div>
 

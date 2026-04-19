@@ -230,11 +230,16 @@ export default function BookCoverSwipe({
               boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}
           >
-            <p style={{ fontSize: 10, color: "#5A5A5A", letterSpacing: 1, margin: 0 }}>
+            <p style={{ fontSize: 10, color: "#9A9A9A", letterSpacing: 1, margin: 0 }}>
               독서 여정
             </p>
             <div style={{ width: "100%" }}>
-              <JourneyPath totalParts={totalParts} currentPart={currentPart} />
+              {/* 큰 단위(파트) 여정 — 라벨은 각 파트의 제목. */}
+              <JourneyPath
+                totalParts={totalParts}
+                currentPart={currentPart}
+                labels={selectedBook.parts.map((p) => p.title)}
+              />
             </div>
             <p style={{ fontSize: 11, color: "#E8E8E8", margin: 0 }}>
               <span style={{ color: "#00FF7A", fontWeight: 700 }}>PART {currentPart}</span>

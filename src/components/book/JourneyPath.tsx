@@ -1,31 +1,43 @@
 "use client";
 
 // 독서 여정을 구불구불 점선 + 정류장 점으로 그리는 컴포넌트.
-// 파트를 정류장 점으로, 파트 사이를 곡선 점선으로 연결.
-// 현재 위치는 깜빡거리는 초록 점.
+// 스테이션 라벨은 labels[i] 가 있으면 그대로, 없으면 숫자(i+1).
+// 배경 #050505 위에서 읽히도록 회색 톤은 의도적으로 밝게 유지한다 — 너무 어두우면 사라짐.
 
 interface JourneyPathProps {
-  totalParts: number;    // 전체 파트 수 (정류장 개수)
-  currentPart: number;   // 현재 읽고 있는 파트 (1-based)
+  totalParts: number;    // 정류장 개수
+  currentPart: number;   // 현재 정류장 (1-based)
+  labels?: string[];     // 각 정류장 라벨(없으면 숫자)
 }
 
-export default function JourneyPath({ totalParts, currentPart }: JourneyPathProps) {
-  // 곡선 경로 — 상하로 파동치는 sine-wave 스타일. 파트 수에 맞춰 좌표 계산.
+// 라벨은 좁은 공간에 들어가므로 공통 프리픽스("파트 N · ", "N장 · ")를 벗기고
+// 가운뎃점(·) 뒤의 실제 제목만 남긴다. 길이가 길면 잘라낸다.
+function shortenLabel(raw: string, maxLen = 6): string {
+  const parts = raw.split(" · ");
+  const core = parts.length > 1 ? parts[parts.length - 1] : raw;
+  return core.length > maxLen ? core.slice(0, maxLen) + "…" : core;
+}
+
+export default function JourneyPath({
+  totalParts,
+  currentPart,
+  labels,
+}: JourneyPathProps) {
+  // 곡선 경로 — 상하로 파동치는 sine-wave 스타일.
   const width = 320;
-  const height = 80;
+  const height = 100;           // 하단 라벨 공간 확보 — 이전 80은 라벨 잘림.
   const padding = 20;
   const usableWidth = width - padding * 2;
-  const amplitude = 18;          // 곡선 진폭
-  const midY = height / 2;
+  const amplitude = 16;
+  const midY = 44;
 
-  // 각 파트의 (x, y) 위치 — 짝수는 위로, 홀수는 아래로 흔들림
   const points = Array.from({ length: totalParts }, (_, i) => {
     const x = padding + (usableWidth * i) / Math.max(totalParts - 1, 1);
     const y = midY + Math.sin((i / Math.max(totalParts - 1, 1)) * Math.PI * 2) * amplitude;
     return { x, y };
   });
 
-  // SVG path — 부드러운 곡선 연결 (Catmull-Rom 근사 → Bezier)
+  // SVG path — 부드러운 곡선 연결
   const pathD = points
     .map((p, i) => {
       if (i === 0) return `M ${p.x} ${p.y}`;
@@ -45,7 +57,7 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
       <path
         d={pathD}
         fill="none"
-        stroke="#2A2A2A"
+        stroke="#3A3A3A"
         strokeWidth={1.5}
         strokeDasharray="3 4"
         strokeLinecap="round"
@@ -69,7 +81,6 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
           strokeDasharray="3 4"
           strokeLinecap="round"
           strokeDashoffset={0}
-          // 현재 파트까지만 보이도록 pathLength 기반 자르기
           pathLength={100}
           style={{
             strokeDasharray: `${((currentPart - 1) / (totalParts - 1)) * 100} 100`,
@@ -77,11 +88,15 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
         />
       )}
 
-      {/* 정류장 점 */}
+      {/* 정류장 점 + 라벨 */}
       {points.map((p, i) => {
         const partNum = i + 1;
         const isPassed = partNum < currentPart;
         const isCurrent = partNum === currentPart;
+        const rawLabel = labels?.[i];
+        const displayLabel = rawLabel
+          ? shortenLabel(rawLabel)
+          : String(partNum);
 
         if (isCurrent) {
           return (
@@ -110,7 +125,7 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
                   repeatCount="indefinite"
                 />
               </circle>
-              {/* 라벨 */}
+              {/* 라벨 — 현재 정류장은 라벨 있으면 "여기 · 제목", 없으면 "여기" */}
               <text
                 x={p.x}
                 y={p.y + 22}
@@ -119,7 +134,7 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
                 fill="#00FF7A"
                 fontWeight={700}
               >
-                여기
+                {rawLabel ? `여기 · ${shortenLabel(rawLabel)}` : "여기"}
               </text>
             </g>
           );
@@ -131,8 +146,8 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
               cx={p.x}
               cy={p.y}
               r={3.5}
-              fill={isPassed ? "#00B858" : "#1F1F1F"}
-              stroke={isPassed ? "#00B858" : "#3A3A3A"}
+              fill={isPassed ? "#00B858" : "#2A2A2A"}
+              stroke={isPassed ? "#00B858" : "#5A5A5A"}
               strokeWidth={1}
             />
             <text
@@ -140,9 +155,9 @@ export default function JourneyPath({ totalParts, currentPart }: JourneyPathProp
               y={p.y + 18}
               textAnchor="middle"
               fontSize={8}
-              fill={isPassed ? "#5A5A5A" : "#3A3A3A"}
+              fill={isPassed ? "#9A9A9A" : "#7A7A7A"}
             >
-              {partNum}
+              {displayLabel}
             </text>
           </g>
         );

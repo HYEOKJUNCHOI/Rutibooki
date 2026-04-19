@@ -29,7 +29,9 @@ export default function TodayCard({ book }: TodayCardProps) {
   const section = getActiveSection(book, currentPage || 1);
   const part = getActivePart(book, currentPage || 1);
 
-  const pagesToRead = Math.max(1, section.endPage - (currentPage > 0 ? currentPage : section.startPage - 1));
+  // 라벨에 섹션 전체 범위(1~28p)를 보여주므로 시간도 섹션 전체 기준이어야 일관됨.
+  // (남은 페이지 기준으로 하면 "1~28p / 2분" 같은 불일치가 난다)
+  const pagesToRead = Math.max(1, section.endPage - section.startPage + 1);
   const { min, anchor } = estimateMinutes(bookWithPace, pagesToRead);
   // 3회 미만(min === null)이면 anchor, 이상이면 EMA min. 두 경우 모두 같은 문구 템플릿.
   const minutes = min ?? anchor;

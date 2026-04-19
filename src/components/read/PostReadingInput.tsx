@@ -2,27 +2,31 @@
 
 import { useState } from "react";
 import { Book } from "@/types/book";
-import { getActiveSection } from "@/utils/reading";
+import { calcDailyRange } from "@/utils/reading";
 
 // T-25: Reading 종료 후 "어디까지 읽었어요?" 숫자 입력.
-// pre-fill = 현재 페이지가 속한 섹션의 endPage. 모자라게 읽었으면 수동 수정.
-// 걸린 시간·목표 등 평가 요소는 절대 노출하지 않는다. 질문만 부드럽게.
+// pre-fill = 이번 세션에서 기대하는 끝 페이지 (calcDailyRange).
+// 이미 섹션 끝에 도달한 상태면 다음 섹션 끝으로 자동 이동 — 1 같은 이상값 방지.
+// 걸린 시간·목표 등 평가 요소는 절대 노출하지 않는다.
 
 interface PostReadingInputProps {
   book: Book;
   startPage: number;
   onConfirm: (endPage: number) => void;
+  onCancel?: () => void;
 }
 
 export default function PostReadingInput({
   book,
   startPage,
   onConfirm,
+  onCancel,
 }: PostReadingInputProps) {
-  // pre-fill: 시작 페이지가 속한 섹션의 endPage.
-  // startPage가 0(아직 진짜 첫 페이지 안 읽음)인 경우엔 첫 섹션의 endPage.
-  const activeSection = getActiveSection(book, startPage || 1);
-  const [value, setValue] = useState<string>(String(activeSection.endPage));
+  // calcDailyRange는 "섹션 끝까지 도달"한 경우도 다음 섹션으로 넘겨주므로
+  // startPage보다 항상 크거나 같은 안전한 pre-fill을 보장.
+  const daily = calcDailyRange(book, startPage);
+  const prefill = Math.max(daily.end, startPage);
+  const [value, setValue] = useState<string>(String(prefill));
 
   const parsed = Number.parseInt(value, 10);
   const min = Math.max(startPage, 1);
@@ -49,6 +53,30 @@ export default function PostReadingInput({
         padding: "0 32px",
       }}
     >
+      {/* 취소 — 잘못 long-press로 종료했을 때 되돌아갈 탈출구. 빨강 금지(4차 회의 색 대비 규칙). */}
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="취소"
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 16,
+            background: "transparent",
+            border: "none",
+            color: "#5A5A5A",
+            fontSize: 14,
+            fontFamily: "inherit",
+            padding: "8px 12px",
+            cursor: "pointer",
+            letterSpacing: "-0.3px",
+          }}
+        >
+          ✕ 취소
+        </button>
+      )}
+
       <p
         style={{
           fontSize: 20,

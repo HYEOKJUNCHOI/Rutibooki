@@ -147,6 +147,7 @@ function ReadFlow({
           book={book}
           startPage={startPage}
           onConfirm={confirmEndPage}
+          onCancel={onHome}
         />
       )}
 

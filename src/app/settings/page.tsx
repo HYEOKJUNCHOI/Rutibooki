@@ -26,6 +26,14 @@ export default function SettingsPage() {
   const router = useRouter();
   const registered = useBooksStore((s) => s.registered);
   const removeBook = useBooksStore((s) => s.removeBook);
+  const resetBook = useReadingStore((s) => s.resetBook);
+
+  // 진행 초기화는 돌이킬 수 없으므로 확인 한 번 받는다. alert 레벨 유지(모달까지는 오버엔지니어링).
+  const handleReset = (bookId: string, title: string) => {
+    if (confirm(`"${title}"의 진행·기록·인용을 모두 초기화할까요?\n되돌릴 수 없어요.`)) {
+      resetBook(bookId);
+    }
+  };
 
   useEffect(() => {
     useReadingStore.persist.rehydrate();
@@ -177,6 +185,22 @@ export default function SettingsPage() {
                           {b.author || "—"} · {b.parts.length}파트
                         </div>
                       </div>
+                      <button
+                        onClick={() => handleReset(b.id, b.title)}
+                        style={{
+                          background: "transparent",
+                          color: "#7A7A4A",
+                          border: "1px solid #2A2A1A",
+                          borderRadius: 6,
+                          padding: "4px 8px",
+                          fontSize: 10,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                        aria-label={`${b.title} 진행 초기화`}
+                      >
+                        초기화
+                      </button>
                       {isUserBook && (
                         <button
                           onClick={() => removeBook(b.id)}

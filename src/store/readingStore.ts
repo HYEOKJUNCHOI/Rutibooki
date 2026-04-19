@@ -31,6 +31,8 @@ interface ReadingStore {
     startPage: number;
     elapsedSec: number;
   }) => void;
+  // 테스트/실수 복구용 — 특정 책의 진행·로그·페이스·인용을 모두 비운다.
+  resetBook: (bookId: string) => void;
   draft: {
     bookId: string;
     startedAt: string;
@@ -160,6 +162,28 @@ export const useReadingStore = create<ReadingStore>()(
       markCoachmarkShown: () => set({ coachmarkShown: true }),
 
       saveDraft: (draft) => set({ draft }),
+
+      resetBook: (bookId) => {
+        set((state) => {
+          const now = new Date().toISOString();
+          return {
+            statesByBook: {
+              ...state.statesByBook,
+              [bookId]: {
+                bookId,
+                currentPage: 0,
+                activePartIndex: 1,
+                activeSectionIndex: 0,
+                lastOpenedAt: now,
+              },
+            },
+            logs: state.logs.filter((l) => l.bookId !== bookId),
+            quotes: state.quotes.filter((q) => q.bookId !== bookId),
+            paceByBook: { ...state.paceByBook, [bookId]: undefined },
+            draft: state.draft?.bookId === bookId ? null : state.draft,
+          };
+        });
+      },
     }),
     {
       name: "ruti-reading-v1",

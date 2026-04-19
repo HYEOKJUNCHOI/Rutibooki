@@ -1,50 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { books } from "@/data/books";
+import { books as mockBooks } from "@/data/books";
+import { useBooksStore } from "@/store/booksStore";
+import { useReadingStore } from "@/store/readingStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
 import { formatDateShort, getDayLabel } from "@/utils/reading";
-import { useReadingStore } from "@/store/readingStore";
 import PhoneFrame from "@/components/layout/PhoneFrame";
-import BookCoverSwipe from "@/components/book/BookCoverSwipe";
-import TodayCard from "@/components/book/TodayCard";
-import RestNudge from "@/components/book/RestNudge";
-import { getNudge } from "@/data/nudges";
-import { ONBOARD_FLAG_KEY } from "@/constants/onboarding";
+import LibraryCard from "@/components/library/LibraryCard";
 
-export default function Home() {
+// 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
+// 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
+
+export default function LibraryHome() {
   const router = useRouter();
   const today = new Date();
-  const todayIdx = today.getDay();
   const dateStr = formatDateShort(today);
 
-  // MVP = 한 권 모드. selectedIdx는 고정 0. BookCoverSwipe는 books.length > 1일 때만 스와이프 활성.
-  // books 배열은 Foundation 유지(V2 서재 대비), 홈에선 첫 권만 노출.
-  const [selectedIdx, setSelectedIdx] = useState(0);
-  const [showNudge, setShowNudge] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Zustand persist는 skipHydration — 클라이언트 마운트 후 수동 rehydrate 필요.
   useEffect(() => {
-    useReadingStore.persist.rehydrate();
+    Promise.all([
+      Promise.resolve(useReadingStore.persist.rehydrate()),
+      Promise.resolve(useBooksStore.persist.rehydrate()),
+    ]).finally(() => setHydrated(true));
   }, []);
 
-  // 온보딩 자동 노출은 일단 비활성화 — 홈이 바로 뜬다.
-  // 다시 켜려면 아래 블록 복구 + ONBOARD_FLAG_KEY 체크 되돌리면 됨.
-  // 온보딩 자체는 /onboarding 라우트와 Settings "온보딩 다시보기"로 여전히 접근 가능.
-  useEffect(() => {
-    if (books.length === 0) {
-      router.replace("/register");
-    }
-  }, [router]);
+  const registered = useBooksStore((s) => s.registered);
+  const statesByBook = useReadingStore((s) => s.statesByBook);
 
-  const covers = useBookCovers(books);
-  const selectedBook = books[selectedIdx];
+  // 사용자 등록 책 + 목업 병합. 동일 id 충돌 시 등록본 우선.
+  const books = useMemo(() => {
+    const seen = new Set(registered.map((b) => b.id));
+    return [...registered, ...mockBooks.filter((b) => !seen.has(b.id))];
+  }, [registered]);
 
-  const handleOpenBook = () => {
-    // /read 라우트는 T-20에서 생성 예정. 현 단계에선 이동만 심어둠.
-    router.push(`/read?bookId=${selectedBook.id}`);
-  };
+  // 최근 읽은 순 정렬 — 미열람은 뒤로.
+  const sortedBooks = useMemo(() => {
+    return [...books].sort((a, b) => {
+      const la = statesByBook[a.id]?.lastOpenedAt ?? "";
+      const lb = statesByBook[b.id]?.lastOpenedAt ?? "";
+      return lb.localeCompare(la);
+    });
+  }, [books, statesByBook]);
+
+  const covers = useBookCovers(sortedBooks);
 
   return (
     <main
@@ -52,100 +53,119 @@ export default function Home() {
       className="flex flex-col items-center justify-center px-6 py-12"
     >
       <PhoneFrame>
-        {/* 헤더 — 요일·날짜·쉬어가기 한 줄 */}
+        {/* 헤더 — 서재 제목 · 날짜 · 설정 */}
         <div
           style={{
-            marginBottom: 16,
+            marginBottom: 18,
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: "baseline",
           }}
         >
-          <p style={{ fontSize: 13, color: "#E8E8E8", letterSpacing: 1 }}>
-            <span style={{ color: "#00FF7A", fontWeight: 600 }}>
-              {getDayLabel(todayIdx)}
-            </span>
-            <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
-            {dateStr}
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              onClick={() => setShowNudge(true)}
+          <div>
+            <h1
               style={{
-                background: "transparent",
+                fontSize: 22,
+                fontWeight: 800,
                 color: "#E8E8E8",
-                border: "none",
-                fontSize: 11,
-                cursor: "pointer",
-                fontFamily: "inherit",
+                margin: 0,
+                letterSpacing: "-0.5px",
               }}
             >
-              쉬어가기
-            </button>
-            {/* T-45: 설정 진입 — 회색 12px 톱니(유니코드 ⚙). next/link 대신 router.push 유지. */}
-            <button
-              onClick={() => router.push("/settings")}
-              aria-label="설정"
+              서재
+            </h1>
+            <p
               style={{
-                background: "transparent",
-                color: "#7A7A7A",
-                border: "none",
-                fontSize: 14,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                padding: 0,
-                lineHeight: 1,
+                fontSize: 11,
+                color: "#5A5A5A",
+                margin: "4px 0 0",
+                letterSpacing: 1,
               }}
             >
-              ⚙
-            </button>
+              <span style={{ color: "#00FF7A", fontWeight: 600 }}>
+                {getDayLabel(today.getDay())}
+              </span>
+              <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
+              {dateStr}
+            </p>
           </div>
+          <button
+            onClick={() => router.push("/settings")}
+            aria-label="설정"
+            style={{
+              background: "transparent",
+              color: "#7A7A7A",
+              border: "none",
+              fontSize: 16,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              padding: 0,
+              lineHeight: 1,
+            }}
+          >
+            ⚙
+          </button>
         </div>
 
-        {/* 책 표지 스와이프 — 한 권 모드에서는 스와이프 비활성. 카드 뒤집기(JourneyPath)는 유지. */}
-        <BookCoverSwipe
-          books={books}
-          covers={covers}
-          selectedIdx={selectedIdx}
-          onSelect={setSelectedIdx}
-        />
+        {/* 서재 그리드 — 3열. 빈 상태면 등록 유도. */}
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 80 }}>
+          {hydrated && sortedBooks.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "60px 20px",
+                color: "#5A5A5A",
+                fontSize: 13,
+                lineHeight: 1.8,
+              }}
+            >
+              아직 서재가 비어 있어요.
+              <br />첫 책을 등록해볼까요?
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 14,
+              }}
+            >
+              {sortedBooks.map((book, idx) => (
+                <LibraryCard
+                  key={book.id}
+                  book={book}
+                  cover={covers[idx]}
+                  onClick={() => router.push(`/book/${book.id}`)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* 오늘 카드 — 파트/섹션 라벨 + anchor 시간 문구 */}
-        <TodayCard book={selectedBook} />
-
-        {/* CTA — /read 로 진입 */}
+        {/* FAB — 책 등록. 헌법상 강한 색은 액션 트리거에만. */}
         <button
-          onClick={handleOpenBook}
+          onClick={() => router.push("/register")}
+          aria-label="책 등록"
           style={{
-            width: "100%",
+            position: "absolute",
+            right: 20,
+            bottom: 24,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
             background: "#00FF7A",
             color: "#000",
             border: "none",
-            borderRadius: 14,
-            padding: "18px",
-            fontSize: 17,
-            fontWeight: 800,
+            fontSize: 24,
+            fontWeight: 700,
             cursor: "pointer",
             fontFamily: "inherit",
-            letterSpacing: "-0.5px",
+            boxShadow: "0 6px 20px rgba(0,255,122,0.35)",
           }}
         >
-          책 펼쳤어요 →
+          +
         </button>
-
-        {/* 쉬어가기 오버레이 — 4차 회의에서 제거 명시 없음, 유지. nudge 소스는 data/nudges.ts */}
-        {showNudge && (
-          <RestNudge
-            nudge={getNudge(selectedBook.id)}
-            onClose={() => setShowNudge(false)}
-          />
-        )}
       </PhoneFrame>
-
-      <p style={{ color: "#5A5A5A", fontSize: 12, marginTop: 20, letterSpacing: 1 }}>
-        스플래시 없이 바로.{" "}
-        <span style={{ color: "#00FF7A" }}>책 한 권, 버튼 하나</span>.
-      </p>
     </main>
   );
 }

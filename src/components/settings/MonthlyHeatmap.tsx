@@ -34,7 +34,12 @@ function addMonth(ym: string, delta: number): string {
   return ymKey(d);
 }
 
-export default function MonthlyHeatmap() {
+interface Props {
+  // 홈 띠지용 컴팩트 모드. 월 네비/요일/범례 모두 생략하고, 오늘 날짜만 왼쪽 아래에 작게 표시.
+  compact?: boolean;
+}
+
+export default function MonthlyHeatmap({ compact = false }: Props) {
   // 현재 월 기본값 계산은 Date.now() → 마운트 후에만. useState 초기값은 첫 렌더에서 실행되지만
   // 이 컴포넌트는 "use client" 이고 설정 페이지에서만 렌더되므로 서버에서는 실행되지 않음.
   const [cursor, setCursor] = useState<string>(() => ymKey(new Date()));
@@ -48,6 +53,56 @@ export default function MonthlyHeatmap() {
   const offset = useMemo(() => firstDayOffset(cursor), [cursor]);
 
   const hasAny = cells.some((c) => c.intensity > 0);
+
+  if (compact) {
+    // 홈용 얇은 띠 — 한 줄 가로 배치. 왼쪽 아래 오늘 날짜(YYYY.MM.DD, 10px, #5A5A5A).
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}.${String(
+      today.getMonth() + 1,
+    ).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
+    return (
+      <div
+        style={{
+          position: "relative",
+          padding: "10px 12px 16px",
+          background: "#0C0C0C",
+          border: "1px solid #1A1A1A",
+          borderRadius: 10,
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${cells.length || 1}, 1fr)`,
+            gap: 3,
+            height: 22,
+          }}
+        >
+          {cells.map((cell) => (
+            <div
+              key={cell.date}
+              style={{
+                background: INTENSITY_COLORS[cell.intensity],
+                borderRadius: 2,
+              }}
+            />
+          ))}
+        </div>
+        <span
+          style={{
+            position: "absolute",
+            left: 12,
+            bottom: 4,
+            fontSize: 10,
+            color: "#5A5A5A",
+            letterSpacing: 0.3,
+          }}
+        >
+          {todayStr}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

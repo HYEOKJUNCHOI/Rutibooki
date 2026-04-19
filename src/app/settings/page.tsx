@@ -1,15 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import PhoneFrame from "@/components/layout/PhoneFrame";
-import MonthlyHeatmap from "@/components/settings/MonthlyHeatmap";
-import { useReadingStore } from "@/store/readingStore";
-import { useBooksStore } from "@/store/booksStore";
-import { books as mockBooks } from "@/data/books";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import { resetOnboarded } from "@/lib/firestore/usersRepo";
+import { getUserProfile, updateNickname } from "@/lib/firestore/usersRepo";
 
 // T-39, T-41: /settings 라우트.
 // 내 독서 지도 + 책 관리 + 앱 정보. Streak/연속일 UI 금지.
@@ -28,27 +25,43 @@ const sectionTitleStyle: React.CSSProperties = {
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const registered = useBooksStore((s) => s.registered);
-  const removeBook = useBooksStore((s) => s.removeBook);
-  const resetBook = useReadingStore((s) => s.resetBook);
 
-  // 진행 초기화는 돌이킬 수 없으므로 확인 한 번 받는다. alert 레벨 유지(모달까지는 오버엔지니어링).
-  const handleReset = (bookId: string, title: string) => {
-    if (confirm(`"${title}"의 진행·기록·인용을 모두 초기화할까요?\n되돌릴 수 없어요.`)) {
-      resetBook(bookId);
-    }
-  };
+  // 닉네임 로컬 입력 상태. Firestore 프로필에서 1회 로드해 채운다.
+  const [nickname, setNickname] = useState("");
+  const [loadedNickname, setLoadedNickname] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  // 온보딩 다시보기 — Firestore 플래그 초기화 후 /onboarding 으로.
-  const handleRewatchOnboarding = async () => {
-    if (user) {
-      try {
-        await resetOnboarded(user.uid);
-      } catch (err) {
-        console.warn("[settings] resetOnboarded", err);
-      }
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    getUserProfile(user.uid)
+      .then((p) => {
+        if (!alive) return;
+        const nn = p?.nickname ?? "";
+        setNickname(nn);
+        setLoadedNickname(nn);
+      })
+      .catch((err) => console.warn("[settings] getUserProfile", err));
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  const handleSaveNickname = async () => {
+    if (!user) return;
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      await updateNickname(user.uid, nickname);
+      setLoadedNickname(nickname.trim());
+      setSaveMsg("저장됐어요");
+    } catch (err) {
+      console.error("[settings] updateNickname", err);
+      setSaveMsg("저장 실패");
+    } finally {
+      setSaving(false);
     }
-    router.push("/onboarding");
   };
 
   const handleLogout = async () => {
@@ -60,8 +73,7 @@ export default function SettingsPage() {
     }
   };
 
-  // 사용자 등록 책 + 목업(V2 예시) 병합. MVP 는 사용자 등록을 우선 노출.
-  const allBooks = [...registered, ...mockBooks];
+  const nicknameDirty = nickname.trim() !== loadedNickname.trim();
 
   return (
     <main
@@ -125,154 +137,57 @@ export default function SettingsPage() {
             paddingBottom: 10,
           }}
         >
-          {/* T-40: 내 독서 지도 */}
+          {/* 닉네임 — "{닉네임}의 서재" 로 표시. 빈값이면 "나의 서재" fallback. */}
           <section>
-            <div style={sectionTitleStyle}>내 독서 지도</div>
-            <MonthlyHeatmap />
-          </section>
-
-          {/* 책 관리 */}
-          <section>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-              <span style={sectionTitleStyle}>책 관리</span>
-              <button
-                onClick={() => router.push("/register")}
+            <div style={sectionTitleStyle}>닉네임</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="나"
+                maxLength={16}
                 style={{
-                  background: "#0E3A2A",
-                  color: "#00FF7A",
-                  border: "1px solid #2A4A3A",
-                  borderRadius: 8,
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  cursor: "pointer",
+                  flex: 1,
+                  background: "#0E0E0E",
+                  color: "#E8E8E8",
+                  border: "1px solid #1F1F1F",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  letterSpacing: "-0.3px",
+                }}
+                aria-label="닉네임"
+              />
+              <button
+                onClick={handleSaveNickname}
+                disabled={saving || !nicknameDirty}
+                style={{
+                  background: nicknameDirty ? "#0E3A2A" : "transparent",
+                  color: nicknameDirty ? "#00FF7A" : "#5A5A5A",
+                  border: `1px solid ${nicknameDirty ? "#2A4A3A" : "#2A2A2A"}`,
+                  borderRadius: 10,
+                  padding: "10px 14px",
+                  fontSize: 12,
+                  cursor: nicknameDirty && !saving ? "pointer" : "default",
                   fontFamily: "inherit",
                   fontWeight: 600,
                 }}
               >
-                + 등록
+                {saving ? "저장 중" : "저장"}
               </button>
             </div>
-
-            {allBooks.length === 0 ? (
-              <p style={{ fontSize: 12, color: "#5A5A5A" }}>
-                아직 등록된 책이 없어요.
-              </p>
-            ) : (
-              <ul
-                style={{
-                  listStyle: "none",
-                  padding: 0,
-                  margin: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                {allBooks.map((b) => {
-                  const isUserBook = registered.some((r) => r.id === b.id);
-                  return (
-                    <li
-                      key={b.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 12px",
-                        background: "#0E0E0E",
-                        border: "1px solid #1F1F1F",
-                        borderRadius: 10,
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            color: "#E8E8E8",
-                            fontSize: 13,
-                            fontWeight: 600,
-                            letterSpacing: "-0.3px",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {b.title}
-                        </div>
-                        <div
-                          style={{
-                            color: "#5A5A5A",
-                            fontSize: 11,
-                            marginTop: 2,
-                          }}
-                        >
-                          {b.author || "—"} · {b.parts.length}파트
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleReset(b.id, b.title)}
-                        style={{
-                          background: "transparent",
-                          color: "#7A7A4A",
-                          border: "1px solid #2A2A1A",
-                          borderRadius: 6,
-                          padding: "4px 8px",
-                          fontSize: 10,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                        aria-label={`${b.title} 진행 초기화`}
-                      >
-                        초기화
-                      </button>
-                      {isUserBook && (
-                        <button
-                          onClick={() => removeBook(b.id)}
-                          style={{
-                            background: "transparent",
-                            color: "#7A3A3A",
-                            border: "1px solid #3A1A1A",
-                            borderRadius: 6,
-                            padding: "4px 8px",
-                            fontSize: 10,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          삭제
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          {/* 온보딩 다시보기 */}
-          <section>
-            <button
-              onClick={handleRewatchOnboarding}
+            <p
               style={{
-                width: "100%",
-                background: "transparent",
-                color: "#9A9A9A",
-                border: "1px solid #2A2A2A",
-                borderRadius: 10,
-                padding: "12px",
-                fontSize: 12,
-                cursor: "pointer",
-                fontFamily: "inherit",
+                fontSize: 10,
+                color: "#5A5A5A",
+                margin: "6px 0 0",
                 letterSpacing: "-0.2px",
               }}
             >
-              온보딩 다시보기
-            </button>
+              {saveMsg ?? "비워두면 \"나의 서재\"로 표시돼요"}
+            </p>
           </section>
 
           {/* 계정 — 로그아웃. 헌법상 강조 없음, 차분한 테두리 버튼. */}

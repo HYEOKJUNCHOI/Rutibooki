@@ -17,6 +17,7 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
   email: string | null;
+  nickname?: string | null;
   onboardedAt: string | null;
   createdAt: unknown; // serverTimestamp
   migratedAt?: unknown;
@@ -74,6 +75,14 @@ export async function markOnboarded(uid: string): Promise<void> {
 export async function resetOnboarded(uid: string): Promise<void> {
   await updateDoc(userDoc(uid), {
     "profile.onboardedAt": null,
+  });
+}
+
+// 닉네임 저장 — 빈 문자열이면 null 로 정리해서 fallback 조건을 단순화.
+export async function updateNickname(uid: string, nickname: string): Promise<void> {
+  const trimmed = nickname.trim();
+  await updateDoc(userDoc(uid), {
+    "profile.nickname": trimmed.length > 0 ? trimmed : null,
   });
 }
 

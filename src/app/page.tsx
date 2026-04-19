@@ -1,28 +1,43 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
 import { useReadingStore } from "@/store/readingStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
-import { formatDateShort, getDayLabel } from "@/utils/reading";
+import { useNickname } from "@/hooks/useNickname";
+import { calcProgress } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
+import MonthlyHeatmap from "@/components/settings/MonthlyHeatmap";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
 
+// 뱃지 정렬 필터 — 로컬 state. URL 로 올릴 정도로 중요하진 않음.
+type Filter = "all" | "favorite" | "fresh" | "progress";
+
+const FILTER_TABS: { key: Filter; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "favorite", label: "⭐ 좋아요" },
+  { key: "fresh", label: "📎 새책" },
+  { key: "progress", label: "% 진행중" },
+];
+
+// 한 줄 4권 고정 — 베스트셀러 진열대 느낌.
+const BOOKS_PER_SHELF = 4;
+
 export default function LibraryHome() {
   const router = useRouter();
-  const today = new Date();
-  const dateStr = formatDateShort(today);
+  const nickname = useNickname();
 
   // AuthProvider 가 로그인 직후 pull 로 스토어를 채운다. 여기선 rehydrate 불필요.
   const hydrated = true;
 
   const registered = useBooksStore((s) => s.registered);
   const statesByBook = useReadingStore((s) => s.statesByBook);
+  const [filter, setFilter] = useState<Filter>("all");
 
   // 사용자 등록 책 + 목업 병합. 동일 id 충돌 시 등록본 우선.
   const books = useMemo(() => {
@@ -39,7 +54,38 @@ export default function LibraryHome() {
     });
   }, [books, statesByBook]);
 
+  // 뱃지 기준 필터. LibraryCard 의 뱃지 판정과 동일 로직.
+  const filteredBooks = useMemo(() => {
+    if (filter === "all") return sortedBooks;
+    return sortedBooks.filter((b) => {
+      const st = statesByBook[b.id];
+      const page = st?.currentPage ?? 0;
+      const progress = calcProgress(page, b.totalPages);
+      if (filter === "favorite") return st?.favorite === true;
+      if (filter === "fresh") return page === 0;
+      if (filter === "progress") return progress > 0 && progress < 100;
+      return true;
+    });
+  }, [sortedBooks, statesByBook, filter]);
+
+  // 커버는 전체 기준으로 미리 계산 — 필터 전환 시 재요청 피함.
   const covers = useBookCovers(sortedBooks);
+  const coverById = useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    sortedBooks.forEach((b, i) => map.set(b.id, covers[i]));
+    return map;
+  }, [sortedBooks, covers]);
+
+  // 한 줄 4권씩 선반(shelf)으로 나눔.
+  const shelves = useMemo(() => {
+    const out: typeof filteredBooks[] = [];
+    for (let i = 0; i < filteredBooks.length; i += BOOKS_PER_SHELF) {
+      out.push(filteredBooks.slice(i, i + BOOKS_PER_SHELF));
+    }
+    return out;
+  }, [filteredBooks]);
+
+  const titleText = nickname ? `${nickname}의 서재` : "나의 서재";
 
   return (
     <main
@@ -47,42 +93,26 @@ export default function LibraryHome() {
       className="flex flex-col items-center justify-center px-6 py-12"
     >
       <PhoneFrame>
-        {/* 헤더 — 서재 제목 · 날짜 · 설정 */}
+        {/* 헤더 — 서재 제목 · 설정. 요일/날짜 라벨은 제거(잔디 왼쪽 아래로 이동). */}
         <div
           style={{
-            marginBottom: 18,
+            marginBottom: 14,
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "baseline",
+            alignItems: "center",
           }}
         >
-          <div>
-            <h1
-              style={{
-                fontSize: 22,
-                fontWeight: 800,
-                color: "#E8E8E8",
-                margin: 0,
-                letterSpacing: "-0.5px",
-              }}
-            >
-              서재
-            </h1>
-            <p
-              style={{
-                fontSize: 11,
-                color: "#5A5A5A",
-                margin: "4px 0 0",
-                letterSpacing: 1,
-              }}
-            >
-              <span style={{ color: "#00FF7A", fontWeight: 600 }}>
-                {getDayLabel(today.getDay())}
-              </span>
-              <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
-              {dateStr}
-            </p>
-          </div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: "#E8E8E8",
+              margin: 0,
+              letterSpacing: "-0.5px",
+            }}
+          >
+            {titleText}
+          </h1>
           <button
             onClick={() => router.push("/settings")}
             aria-label="설정"
@@ -101,9 +131,49 @@ export default function LibraryHome() {
           </button>
         </div>
 
-        {/* 서재 그리드 — 3열. 빈 상태면 등록 유도. */}
+        {/* 상단 잔디 띠 — 설정에 있던 MonthlyHeatmap 을 compact 모드로 재사용. */}
+        <div style={{ marginBottom: 16 }}>
+          <MonthlyHeatmap compact />
+        </div>
+
+        {/* 뱃지 정렬 탭 */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            marginBottom: 18,
+            overflowX: "auto",
+          }}
+        >
+          {FILTER_TABS.map((t) => {
+            const active = filter === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setFilter(t.key)}
+                style={{
+                  flexShrink: 0,
+                  background: active ? "#0E3A2A" : "transparent",
+                  color: active ? "#00FF7A" : "#7A7A7A",
+                  border: `1px solid ${active ? "#2A4A3A" : "#1F1F1F"}`,
+                  borderRadius: 999,
+                  padding: "5px 11px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontWeight: 600,
+                  letterSpacing: "-0.2px",
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 서재 — 선반(shelf) 스타일. 한 줄 4권, 선반 라인 1px 그림자. */}
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 80 }}>
-          {hydrated && sortedBooks.length === 0 ? (
+          {hydrated && filteredBooks.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
@@ -113,26 +183,55 @@ export default function LibraryHome() {
                 lineHeight: 1.8,
               }}
             >
-              아직 서재가 비어 있어요.
-              <br />첫 책을 등록해볼까요?
+              {filter === "all"
+                ? "아직 서재가 비어 있어요."
+                : "조건에 맞는 책이 없어요."}
+              {filter === "all" && (
+                <>
+                  <br />첫 책을 등록해볼까요?
+                </>
+              )}
             </div>
           ) : (
-            // 책장 느낌 — flex-wrap 으로 여러 줄, 자연스럽게 흩뿌려진 배치. 선반 구분선은 V2.
             <div
               style={{
                 display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                rowGap: 16,
+                flexDirection: "column",
+                gap: 24,
+                marginTop: 8,
+                marginBottom: 32,
               }}
             >
-              {sortedBooks.map((book, idx) => (
-                <LibraryCard
-                  key={book.id}
-                  book={book}
-                  cover={covers[idx]}
-                  onClick={() => router.push(`/book/${book.id}`)}
-                />
+              {shelves.map((shelf, shelfIdx) => (
+                <div key={shelfIdx} style={{ position: "relative" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, 1fr)",
+                      gap: 14,
+                      justifyItems: "center",
+                      alignItems: "end",
+                      paddingBottom: 6,
+                    }}
+                  >
+                    {shelf.map((book) => (
+                      <LibraryCard
+                        key={book.id}
+                        book={book}
+                        cover={coverById.get(book.id)}
+                        onClick={() => router.push(`/book/${book.id}`)}
+                      />
+                    ))}
+                  </div>
+                  {/* 선반 라인 — 나무 선반 그림자 느낌. 1px + 아래로 번지는 미세 그라디언트. */}
+                  <div
+                    style={{
+                      height: 1,
+                      background: "#2A2A2A",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.6)",
+                    }}
+                  />
+                </div>
               ))}
             </div>
           )}

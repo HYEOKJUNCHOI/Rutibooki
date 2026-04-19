@@ -49,16 +49,30 @@ function currentUid(): string | null {
 }
 
 // 등록된 책들에 대해 기본 ReadingState를 만들어 둔다 — 목업 포함 초기 진입 대응.
+// [MOCKUP] 서재 뱃지 시각 검증용 — 완독·진행 중·새책·좋아요 4상태가 한 화면에 보이도록 분배.
+// Firestore 가 채워지면 자동으로 덮어써짐 — 실사용에는 영향 없음.
+const MOCK_STATE_OVERRIDES: Record<string, { pageRatio?: number; favorite?: boolean }> = {
+  primitive: { pageRatio: 0.37 },      // 37% — 진행 중 (넘패드 8 % 뱃지 확인)
+  immutable: { pageRatio: 1 },          // 완독 — 흑백 + 돋움 돌 효과 확인
+  "money-equation": { pageRatio: 0.58, favorite: true }, // 좋아요 + 진행 중
+  "money-talk": { favorite: true },     // 좋아요 + 새 책
+  hooked: { pageRatio: 1, favorite: true }, // 좋아요 + 완독 (⭐ 컬러 유지)
+  // system / gratitude → 기본(0%, 📎 새 책)
+};
+
 function makeInitialStates(): Record<string, ReadingState> {
   const out: Record<string, ReadingState> = {};
   const now = new Date().toISOString();
   for (const b of initialBooks as Book[]) {
+    const override = MOCK_STATE_OVERRIDES[b.id] ?? {};
+    const ratio = override.pageRatio ?? 0;
     out[b.id] = {
       bookId: b.id,
-      currentPage: 0,
+      currentPage: Math.round(b.totalPages * ratio),
       activePartIndex: 1,
       activeSectionIndex: 0,
       lastOpenedAt: now,
+      favorite: override.favorite,
     };
   }
   return out;

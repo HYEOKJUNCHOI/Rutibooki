@@ -9,7 +9,9 @@ import { formatDateShort, getDayLabel } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import TodayCard from "@/components/book/TodayCard";
+import FullJourney from "@/components/book/FullJourney";
 import RestNudge from "@/components/book/RestNudge";
+import { useBookState } from "@/store/selectors";
 import { getNudge } from "@/data/nudges";
 
 // /book/[id] — 서재에서 책 선택 시 진입하는 상세·실행 화면.
@@ -35,6 +37,9 @@ export default function BookDetailPage({
   // 사용자 등록 책 우선, 없으면 목업에서 찾는다.
   const allBooks = [...registered, ...mockBooks];
   const selectedBook = allBooks.find((b) => b.id === id);
+  // FullJourney 현재 위치 표기용 — 훅은 조건부 호출 불가라 id 없을 땐 빈문자열로.
+  const bookState = useBookState(selectedBook?.id ?? "");
+  const currentPage = bookState?.currentPage ?? 0;
 
   useEffect(() => {
     if (hydrated && !selectedBook) router.replace("/");
@@ -78,17 +83,24 @@ export default function BookDetailPage({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* 뒤로가기 — 이전엔 얇은 ← 기호라 안 보인다는 피드백. 원형 버튼으로 시인성 확보. */}
             <button
               onClick={() => router.push("/")}
               aria-label="서재로"
               style={{
-                background: "transparent",
-                color: "#9A9A9A",
-                border: "none",
-                fontSize: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 32,
+                height: 32,
+                background: "#111",
+                color: "#E8E8E8",
+                border: "1px solid #2A2A2A",
+                borderRadius: "50%",
+                fontSize: 16,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                padding: "2px 4px",
+                padding: 0,
                 lineHeight: 1,
               }}
             >
@@ -126,6 +138,9 @@ export default function BookDetailPage({
         />
 
         <TodayCard book={selectedBook} />
+
+        {/* 대제목·소제목 전체 여정 — 심심한 빈 공간 대신 "이 책 전체 지도" 제공. */}
+        <FullJourney book={selectedBook} currentPage={currentPage} />
 
         <button
           onClick={handleOpenBook}

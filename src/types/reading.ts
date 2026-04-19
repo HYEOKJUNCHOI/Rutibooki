@@ -8,6 +8,9 @@ export interface ReadingState {
   activePartIndex: number;
   activeSectionIndex: number;
   lastOpenedAt: string; // ISO
+  // "좋았던 책" — 추천용 서재 진입점. 완독 여부와 무관하게 토글.
+  // (#18) 초기값 false/undefined. Firestore 는 users/{uid}/readingState/{bookId}.favorite 로 저장.
+  favorite?: boolean;
 }
 
 export interface ReadingLog {

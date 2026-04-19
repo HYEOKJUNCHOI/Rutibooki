@@ -78,16 +78,25 @@ export default function SettingsPage() {
             marginBottom: 18,
           }}
         >
+          {/* 뒤로가기 — 원형 버튼 통일(register/book detail 과 동일 스타일). */}
           <button
             onClick={() => router.back()}
             style={{
-              background: "transparent",
-              color: "#9A9A9A",
-              border: "none",
-              fontSize: 18,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              background: "#111",
+              color: "#E8E8E8",
+              border: "1px solid #2A2A2A",
+              borderRadius: "50%",
+              fontSize: 16,
               cursor: "pointer",
               fontFamily: "inherit",
-              padding: "4px 6px",
+              padding: 0,
+              lineHeight: 1,
+              flexShrink: 0,
             }}
             aria-label="뒤로"
           >

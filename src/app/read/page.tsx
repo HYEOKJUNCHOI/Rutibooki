@@ -47,6 +47,7 @@ function ReadPageInner() {
   const getState = useReadingStore((s) => s.getState);
   const commitLog = useReadingStore((s) => s.commitLog);
   const addQuote = useReadingStore((s) => s.addQuote);
+  const clearDraft = useReadingStore((s) => s.clearDraft);
 
   // 잘못된 bookId 방어.
   useEffect(() => {
@@ -58,6 +59,12 @@ function ReadPageInner() {
     return <BlackFallback />;
   }
 
+  // #10: 세션 취소 — draft 파기 후 이전 화면(책 상세) 으로 복귀.
+  const handleCancel = () => {
+    clearDraft();
+    router.back();
+  };
+
   return (
     <ReadFlow
       book={book}
@@ -65,6 +72,7 @@ function ReadPageInner() {
       commitLog={commitLog}
       addQuote={addQuote}
       onHome={() => router.replace("/")}
+      onCancel={handleCancel}
     />
   );
 }
@@ -75,6 +83,7 @@ interface ReadFlowProps {
   commitLog: ReturnType<typeof useReadingStore.getState>["commitLog"];
   addQuote: ReturnType<typeof useReadingStore.getState>["addQuote"];
   onHome: () => void;
+  onCancel: () => void;
 }
 
 function ReadFlow({
@@ -83,6 +92,7 @@ function ReadFlow({
   commitLog,
   addQuote,
   onHome,
+  onCancel,
 }: ReadFlowProps) {
   const pace = useBookPace(book.id);
   const {
@@ -121,6 +131,7 @@ function ReadFlow({
             startPage={startPage}
             startedAt={new Date().toISOString()}
             onFinish={goPost}
+            onCancel={onCancel}
           />
           {absenceOpen && (
             <AbsenceReturnOverlay

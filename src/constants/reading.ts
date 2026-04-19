@@ -4,8 +4,12 @@
 // Reading 화면 2분 스냅샷 자동 저장 주기 — Wake Lock 실패 시 안전망
 export const AUTOSAVE_INTERVAL_MS = 120_000;
 
-// Long-press로 Reading 종료 / "오늘은 그만" 확정하는 시간 (1.5초는 길다고 판정됨)
-export const LONG_PRESS_MS = 800;
+// Long-press로 Reading 종료 / "오늘은 그만" 확정하는 시간.
+// (#17) 기본값 2초 — 0.8초는 실수 유발이 잦다는 피드백. /settings 에서 프리셋으로 조정 가능.
+export const LONG_PRESS_MS = 2000;
+
+// (#17) 사용자 설정 프리셋 — /settings 의 "길게 누르기 시간" 버튼에 노출.
+export const LONG_PRESS_PRESETS_MS = [800, 1200, 2000, 3000] as const;
 
 // 읽는 속도 EMA 계수 — 최근 기록을 얼만큼 반영할지
 export const EMA_ALPHA = 0.3;

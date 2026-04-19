@@ -84,6 +84,19 @@ export async function updatePage(
   await setDoc(readingDoc(uid, state.bookId), state, { merge: true });
 }
 
+// (#9) 요일 반복 설정. 빈 배열(= 매일)도 명시 저장 가능하도록 merge.
+export async function updateWeekdays(
+  uid: string,
+  bookId: string,
+  weekdays: number[],
+): Promise<void> {
+  await setDoc(
+    readingDoc(uid, bookId),
+    { bookId, weekdays },
+    { merge: true },
+  );
+}
+
 export async function listReadingStates(
   uid: string,
 ): Promise<ReadingDoc[]> {

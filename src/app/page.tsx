@@ -8,6 +8,7 @@ import { useReadingStore } from "@/store/readingStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
 import { useNickname } from "@/hooks/useNickname";
 import { calcProgress } from "@/utils/reading";
+import { pickBooksForToday } from "@/utils/interleave";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
 import MonthlyHeatmap from "@/components/settings/MonthlyHeatmap";
@@ -52,6 +53,13 @@ export default function LibraryHome() {
       const lb = statesByBook[b.id]?.lastOpenedAt ?? "";
       return lb.localeCompare(la);
     });
+  }, [books, statesByBook]);
+
+  // (#9) 오늘 읽을 책 — 요일 매칭 + 인터리빙(가장 오래된 책 우선). 첫 책만 TodayPick 배너로.
+  const todayPick = useMemo(() => {
+    const dow = new Date().getDay();
+    const candidates = pickBooksForToday(books, statesByBook, dow);
+    return candidates[0];
   }, [books, statesByBook]);
 
   // 뱃지 기준 필터. LibraryCard 의 뱃지 판정과 동일 로직.
@@ -135,6 +143,69 @@ export default function LibraryHome() {
         <div style={{ marginBottom: 16 }}>
           <MonthlyHeatmap compact />
         </div>
+
+        {/* (#9) 오늘 읽을 책 — 인터리빙/요일 매칭 결과 1권. 탭 시 해당 책 상세로. */}
+        {todayPick && (
+          <button
+            onClick={() => router.push(`/book/${todayPick.id}`)}
+            aria-label={`오늘은 ${todayPick.title} 어때요`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              width: "100%",
+              background: "#0E0E0E",
+              border: "1px solid #1F1F1F",
+              borderRadius: 12,
+              padding: "10px 12px",
+              marginBottom: 14,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                color: "#5A7A5A",
+                letterSpacing: 1,
+                background: "#0E2A1E",
+                border: "1px solid #2A4A3A",
+                padding: "3px 7px",
+                borderRadius: 6,
+                flexShrink: 0,
+              }}
+            >
+              오늘
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#E8E8E8",
+                  fontWeight: 600,
+                  letterSpacing: "-0.3px",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {todayPick.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#5A5A5A",
+                  letterSpacing: "-0.2px",
+                  marginTop: 2,
+                }}
+              >
+                이 책 펼쳐볼까요?
+              </div>
+            </div>
+            <span style={{ color: "#5A5A5A", fontSize: 14 }}>›</span>
+          </button>
+        )}
 
         {/* 뱃지 정렬 탭 */}
         <div
@@ -233,6 +304,42 @@ export default function LibraryHome() {
                   />
                 </div>
               ))}
+
+              {/* (#5) 무한피드 바닥 힌트 — 더 이상 책이 없을 때 "새 책 등록" 유도.
+                  Intersection Observer 없이 하단 도달 시 자연스럽게 노출. */}
+              {filter === "all" && (
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "20px 16px 8px",
+                    color: "#5A5A5A",
+                    fontSize: 11,
+                    lineHeight: 1.6,
+                    letterSpacing: "-0.2px",
+                  }}
+                >
+                  더 많은 책을 찾고 싶다면…
+                  <br />
+                  <button
+                    type="button"
+                    onClick={() => router.push("/register")}
+                    style={{
+                      marginTop: 8,
+                      background: "transparent",
+                      color: "#8A8A8A",
+                      border: "1px solid #2A2A2A",
+                      borderRadius: 999,
+                      padding: "6px 14px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      letterSpacing: "-0.2px",
+                    }}
+                  >
+                    + 새 책 등록하기
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -6,7 +6,15 @@ import { signOut } from "firebase/auth";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, updateNickname } from "@/lib/firestore/usersRepo";
+import {
+  getUserProfile,
+  updateLongPressMs,
+  updateNickname,
+} from "@/lib/firestore/usersRepo";
+import { LONG_PRESS_MS, LONG_PRESS_PRESETS_MS } from "@/constants/reading";
+import { books as mockBooks } from "@/data/books";
+import { useBooksStore } from "@/store/booksStore";
+import { useReadingStore } from "@/store/readingStore";
 
 // T-39, T-41: /settings 라우트.
 // 내 독서 지도 + 책 관리 + 앱 정보. Streak/연속일 UI 금지.
@@ -22,6 +30,8 @@ const sectionTitleStyle: React.CSSProperties = {
   textTransform: "uppercase" as const,
 };
 
+const DOW_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -32,6 +42,20 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
+  // (#17) 길게 누르기 시간 — 프로필에서 로드, 프리셋 버튼으로 저장.
+  const [longPressMs, setLongPressMs] = useState<number>(LONG_PRESS_MS);
+  const [lpSaving, setLpSaving] = useState(false);
+
+  // (#9) 책별 요일 토글 — Zustand 에서 바로 읽고 쓴다.
+  const registered = useBooksStore((s) => s.registered);
+  const statesByBook = useReadingStore((s) => s.statesByBook);
+  const updateWeekdays = useReadingStore((s) => s.updateWeekdays);
+
+  // 설정에 노출할 책 목록 — 사용자가 등록한 책 우선, 없으면 목업 병합(미 로그인 상태 대비).
+  const booksForSettings = registered.length > 0
+    ? registered
+    : mockBooks;
+
   useEffect(() => {
     if (!user) return;
     let alive = true;
@@ -41,12 +65,36 @@ export default function SettingsPage() {
         const nn = p?.nickname ?? "";
         setNickname(nn);
         setLoadedNickname(nn);
+        const lp = p?.longPressMs;
+        if (typeof lp === "number" && lp > 0) setLongPressMs(lp);
       })
       .catch((err) => console.warn("[settings] getUserProfile", err));
     return () => {
       alive = false;
     };
   }, [user]);
+
+  const handleSelectLongPress = async (ms: number) => {
+    if (!user) return;
+    setLongPressMs(ms);
+    setLpSaving(true);
+    try {
+      await updateLongPressMs(user.uid, ms);
+    } catch (err) {
+      console.error("[settings] updateLongPressMs", err);
+    } finally {
+      setLpSaving(false);
+    }
+  };
+
+  // (#9) 책/요일 토글. 빈 배열도 허용(= 매일).
+  const handleToggleWeekday = (bookId: string, dow: number) => {
+    const current = statesByBook[bookId]?.weekdays ?? [];
+    const next = current.includes(dow)
+      ? current.filter((d) => d !== dow)
+      : [...current, dow].sort((a, b) => a - b);
+    updateWeekdays(bookId, next);
+  };
 
   const handleSaveNickname = async () => {
     if (!user) return;
@@ -222,6 +270,144 @@ export default function SettingsPage() {
               로그아웃
             </button>
           </section>
+
+          {/* (#17) 길게 누르기 시간 — 프리셋 4개. 현재 값은 초록 테두리. */}
+          <section>
+            <div style={sectionTitleStyle}>길게 누르기 시간</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {LONG_PRESS_PRESETS_MS.map((ms) => {
+                const active = ms === longPressMs;
+                return (
+                  <button
+                    key={ms}
+                    onClick={() => handleSelectLongPress(ms)}
+                    disabled={lpSaving}
+                    style={{
+                      flex: 1,
+                      minWidth: 60,
+                      background: active ? "#0E3A2A" : "transparent",
+                      color: active ? "#00FF7A" : "#8A8A8A",
+                      border: `1px solid ${active ? "#2A4A3A" : "#2A2A2A"}`,
+                      borderRadius: 10,
+                      padding: "10px 8px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: lpSaving ? "default" : "pointer",
+                      fontFamily: "inherit",
+                      letterSpacing: "-0.2px",
+                    }}
+                  >
+                    {(ms / 1000).toFixed(1)}s
+                  </button>
+                );
+              })}
+            </div>
+            <p
+              style={{
+                fontSize: 10,
+                color: "#5A5A5A",
+                margin: "6px 0 0",
+                letterSpacing: "-0.2px",
+              }}
+            >
+              읽기 종료·그만 버튼을 확정하는 시간이에요
+            </p>
+          </section>
+
+          {/* (#9) 책 읽을 요일 — 책마다 요일 토글. 아무것도 고르지 않으면 "매일". */}
+          {booksForSettings.length > 0 && (
+            <section>
+              <div style={sectionTitleStyle}>책 읽을 요일</div>
+              <p
+                style={{
+                  fontSize: 10,
+                  color: "#5A5A5A",
+                  margin: "0 0 10px",
+                  letterSpacing: "-0.2px",
+                }}
+              >
+                요일을 고르지 않으면 매일로 설정돼요
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {booksForSettings.map((book) => {
+                  const wd = statesByBook[book.id]?.weekdays ?? [];
+                  const isDaily = wd.length === 0;
+                  return (
+                    <div
+                      key={book.id}
+                      style={{
+                        background: "#0E0E0E",
+                        border: "1px solid #1F1F1F",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 8,
+                          gap: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "#E8E8E8",
+                            fontWeight: 600,
+                            letterSpacing: "-0.3px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            flex: 1,
+                            minWidth: 0,
+                          }}
+                        >
+                          {book.title}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: isDaily ? "#5A7A5A" : "#5A5A5A",
+                            letterSpacing: "-0.2px",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {isDaily ? "매일" : `${wd.length}일`}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {DOW_LABELS.map((label, dow) => {
+                          const on = wd.includes(dow);
+                          return (
+                            <button
+                              key={dow}
+                              onClick={() => handleToggleWeekday(book.id, dow)}
+                              style={{
+                                flex: 1,
+                                background: on ? "#0E3A2A" : "transparent",
+                                color: on ? "#00FF7A" : "#5A5A5A",
+                                border: `1px solid ${on ? "#2A4A3A" : "#2A2A2A"}`,
+                                borderRadius: 6,
+                                padding: "6px 0",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* 앱 정보 — 앱의 헌법 */}
           <section>

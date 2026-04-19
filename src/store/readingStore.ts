@@ -41,6 +41,10 @@ interface ReadingStore {
     startPage: number;
     elapsedSec: number;
   }) => void;
+  // #10: 세션 취소용 — 진행 중이던 draft 만 조용히 파기.
+  clearDraft: () => void;
+  // (#9) 책별 읽는 요일 설정 (0=일 ~ 6=토). 빈 배열이면 "매일".
+  updateWeekdays: (bookId: string, weekdays: number[]) => void;
   resetBook: (bookId: string) => void;
 }
 
@@ -216,6 +220,34 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
   markCoachmarkShown: () => set({ coachmarkShown: true }),
 
   saveDraft: (draft) => set({ draft }),
+
+  clearDraft: () => set({ draft: null }),
+
+  updateWeekdays: (bookId, weekdays) => {
+    set((state) => {
+      const prev = state.statesByBook[bookId];
+      const base: ReadingState =
+        prev ?? {
+          bookId,
+          currentPage: 0,
+          activePartIndex: 1,
+          activeSectionIndex: 0,
+          lastOpenedAt: new Date().toISOString(),
+        };
+      return {
+        statesByBook: {
+          ...state.statesByBook,
+          [bookId]: { ...base, weekdays },
+        },
+      };
+    });
+    const uid = currentUid();
+    if (uid) {
+      readingRepo
+        .updateWeekdays(uid, bookId, weekdays)
+        .catch((err) => console.error("[readingStore] updateWeekdays", err));
+    }
+  },
 
   resetBook: (bookId) => {
     set((state) => {

@@ -21,6 +21,8 @@ export interface UserProfile {
   onboardedAt: string | null;
   createdAt: unknown; // serverTimestamp
   migratedAt?: unknown;
+  // (#17) 길게 누르기 시간(ms) — 미설정이면 LONG_PRESS_MS 기본값 사용.
+  longPressMs?: number | null;
 }
 
 function userDoc(uid: string) {
@@ -83,6 +85,16 @@ export async function updateNickname(uid: string, nickname: string): Promise<voi
   const trimmed = nickname.trim();
   await updateDoc(userDoc(uid), {
     "profile.nickname": trimmed.length > 0 ? trimmed : null,
+  });
+}
+
+// (#17) 길게 누르기 시간 저장. ms 단위. 범위는 호출부에서 검증.
+export async function updateLongPressMs(
+  uid: string,
+  ms: number,
+): Promise<void> {
+  await updateDoc(userDoc(uid), {
+    "profile.longPressMs": ms,
   });
 }
 

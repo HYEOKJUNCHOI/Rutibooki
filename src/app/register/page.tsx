@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import RegisterSlot from "@/components/register/RegisterSlot";
@@ -58,6 +58,14 @@ export default function RegisterPage() {
 
   const addBook = useBooksStore((s) => s.addBook);
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
+
+  // (#4) 표지 촬영 → Vision → 네이버 검색 연동은 외부 API 키 필요해서 UI 껍데기만.
+  // 3초 후 자동 사라지는 토스트로 "곧 열어둘게요" 메시지.
+  const [scanToast, setScanToast] = useState(false);
+  const handleScanCover = () => {
+    setScanToast(true);
+    window.setTimeout(() => setScanToast(false), 2500);
+  };
 
   // 필수 2슬롯 + 제목이 있어야 등록 완료 가능.
   const canSave = useMemo(() => {
@@ -193,6 +201,27 @@ export default function RegisterPage() {
                 네이버 검색 결과로 자동 표시 — 다른 표지를 쓰려면 탭해서 교체하세요.
               </p>
             )}
+
+            {/* (#4) 표지 촬영 — Vision/네이버 연동 전 UI 껍데기. */}
+            <button
+              type="button"
+              onClick={handleScanCover}
+              style={{
+                marginTop: 10,
+                width: "100%",
+                background: "transparent",
+                color: "#8A8A8A",
+                border: "1px dashed #2A2A2A",
+                borderRadius: 10,
+                padding: "10px",
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: "-0.2px",
+              }}
+            >
+              📸 표지 촬영으로 찾기
+            </button>
           </section>
 
           {/* 제목/저자 */}
@@ -326,6 +355,30 @@ export default function RegisterPage() {
         >
           등록 완료
         </button>
+
+        {/* (#4) 곧 열어둘 기능 안내 토스트 — 화면 하단 중앙, 자동 사라짐. */}
+        {scanToast && (
+          <div
+            role="status"
+            style={{
+              position: "absolute",
+              bottom: 100,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "#111",
+              color: "#E8E8E8",
+              border: "1px solid #2A4A3A",
+              borderRadius: 999,
+              padding: "8px 14px",
+              fontSize: 12,
+              letterSpacing: "-0.2px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            곧 열어둘게요 📸
+          </div>
+        )}
       </PhoneFrame>
     </main>
   );

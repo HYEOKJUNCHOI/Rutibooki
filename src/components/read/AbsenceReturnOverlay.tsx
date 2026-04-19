@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Book } from "@/types/book";
 import { useLongPress } from "@/hooks/useLongPress";
+import { useLongPressMs } from "@/hooks/useLongPressMs";
 import { getActivePart, getActiveSection } from "@/utils/reading";
 import JourneyPath from "@/components/book/JourneyPath";
 import LongPressRing from "./LongPressRing";
@@ -36,7 +37,8 @@ export default function AbsenceReturnOverlay({
       (s) => s.startPage === section.startPage && s.endPage === section.endPage,
     ),
   );
-  const stopLong = useLongPress(onStopToday, { haptic: true });
+  const durationMs = useLongPressMs();
+  const stopLong = useLongPress(onStopToday, { haptic: true, durationMs });
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setOpacity(1));

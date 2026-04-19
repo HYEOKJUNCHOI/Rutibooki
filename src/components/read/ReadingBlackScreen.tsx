@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Book } from "@/types/book";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useLongPress } from "@/hooks/useLongPress";
+import { useLongPressMs } from "@/hooks/useLongPressMs";
 import { AUTOSAVE_INTERVAL_MS } from "@/constants/reading";
 import { useReadingStore } from "@/store/readingStore";
 import LongPressRing from "./LongPressRing";
@@ -18,6 +19,8 @@ interface ReadingBlackScreenProps {
   startPage: number;
   startedAt: string; // ISO
   onFinish: () => void;
+  // #10: "책 펼쳤어요" 직후 실수로 진입했을 때 세션을 파기하고 이전 화면으로 복귀.
+  onCancel?: () => void;
 }
 
 export default function ReadingBlackScreen({
@@ -25,6 +28,7 @@ export default function ReadingBlackScreen({
   startPage,
   startedAt,
   onFinish,
+  onCancel,
 }: ReadingBlackScreenProps) {
   useWakeLock(true);
 
@@ -42,7 +46,8 @@ export default function ReadingBlackScreen({
     onFinish();
   }, [onFinish]);
 
-  const long = useLongPress(handleFinish, { haptic: true });
+  const durationMs = useLongPressMs();
+  const long = useLongPress(handleFinish, { haptic: true, durationMs });
 
   // 2분 자동 스냅샷 — Wake Lock 실패 케이스 안전망.
   // 실제 commitLog는 PostReadingInput에서. 여기선 "어디까지 읽었다고 추정되는지"만 저장.
@@ -95,6 +100,38 @@ export default function ReadingBlackScreen({
           currentPage={startPage}
           onAutoClose={() => setStationOpen(false)}
         />
+      )}
+
+      {/* #10: 취소 — 실수로 "책 펼쳤어요" 눌렀을 때 세션 파기.
+          상단 우측 작은 텍스트 버튼. 헌법상 조용한 색 #5A5A5A. */}
+      {onCancel && (
+        <button
+          type="button"
+          onClick={(e) => {
+            // 탭 = 정류장 토글 핸들러가 상위에 있으므로 전파 차단.
+            e.stopPropagation();
+            onCancel();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          aria-label="세션 취소"
+          style={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            background: "transparent",
+            border: "none",
+            color: "#5A5A5A",
+            fontSize: 12,
+            fontFamily: "inherit",
+            padding: "6px 10px",
+            cursor: "pointer",
+            letterSpacing: "-0.3px",
+            zIndex: 2,
+          }}
+        >
+          취소
+        </button>
       )}
 
       {/* 코치마크 — 첫 세션 1회만 */}

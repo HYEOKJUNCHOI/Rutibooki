@@ -9,7 +9,7 @@ import { formatDateShort, getDayLabel } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import TodayCard from "@/components/book/TodayCard";
-import CurvyJourney from "@/components/book/CurvyJourney";
+import FullJourney from "@/components/book/FullJourney";
 import RestNudge from "@/components/book/RestNudge";
 import { useBookState } from "@/store/selectors";
 import { getNudge } from "@/data/nudges";
@@ -139,8 +139,8 @@ export default function BookDetailPage({
 
         <TodayCard book={selectedBook} />
 
-        {/* 보물지도 스타일 여정 — S-curve bezier로 파트 노드를 연결. FullJourney 세로 스크롤 유발 문제를 해결. */}
-        <CurvyJourney book={selectedBook} currentPage={currentPage} />
+        {/* 에디토리얼 타임라인 여정 v2 — 왼쪽 레일 + 현재 파트만 펼침. 고정 뷰포트 수렴. */}
+        <FullJourney book={selectedBook} currentPage={currentPage} />
 
         <button
           onClick={handleOpenBook}

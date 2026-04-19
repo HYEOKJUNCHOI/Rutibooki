@@ -30,4 +30,7 @@ export interface Book {
   avgMinPerPage?: number;
   // 등록일 (ISO)
   registeredAt: string;
+  // Gemini Vision 이 표지에서 추론한 장르(자기계발/경영/에세이/소설 등).
+  // 목업 책은 비어있고, 사용자 등록 책에만 채워짐.
+  genre?: string;
 }

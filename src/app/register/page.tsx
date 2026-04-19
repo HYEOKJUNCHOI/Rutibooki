@@ -129,6 +129,7 @@ export default function RegisterPage() {
         totalPages,
         parts,
         registeredAt: new Date().toISOString(),
+        genre: state.genre.trim() || undefined,
       };
 
       addBook(book);

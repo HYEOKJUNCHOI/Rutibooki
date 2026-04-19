@@ -113,6 +113,25 @@ export default function BookDetailPage({
               <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
               {dateStr}
             </p>
+            {/* 장르 칩 — Gemini 가 표지에서 추론한 값. 목업 책은 비어있어 미표시. */}
+            {selectedBook.genre && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#9AE0B9",
+                  background: "rgba(0,255,122,0.08)",
+                  border: "1px solid rgba(0,255,122,0.2)",
+                  borderRadius: 10,
+                  padding: "3px 8px",
+                  letterSpacing: "-0.2px",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {selectedBook.genre}
+              </span>
+            )}
           </div>
           <button
             onClick={() => setShowNudge(true)}

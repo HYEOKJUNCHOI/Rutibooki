@@ -14,6 +14,12 @@ export const nudgesByBookId: Record<string, string> = {
   gratitude: "감사한 하루, 한 문장이면 충분해요.",
 };
 
+// 사용자 등록 책은 nudgesByBookId 에 없으므로 fallback 을 탄다.
+// 기존 목업 문구는 모두 2줄("\n") 구성 — fallback 도 같은 리듬으로 맞춰야 RestNudge
+// 렌더 시 두 번째 줄 여백이 붕 뜨지 않음.
 export function getNudge(bookId: string): string {
-  return nudgesByBookId[bookId] ?? "딱 첫 문장만 읽어볼래요?";
+  return (
+    nudgesByBookId[bookId] ??
+    "딱 첫 문장만 읽어볼래요?\n한 줄이면 오늘의 독서가 열려요."
+  );
 }

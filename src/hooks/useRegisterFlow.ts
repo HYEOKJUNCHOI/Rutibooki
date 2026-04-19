@@ -35,6 +35,8 @@ export interface RegisterFlowState {
   tocSlots: Record<TocSlotKey, SlotFile | null>;
   title: string;
   author: string;
+  // Gemini Vision 이 추론한 장르. handleSave 에서 Book.genre 로 흘러감.
+  genre: string;
   naverCoverUrl: string | null;
   tocResult: TocResult | null;
   tocError: string | null;
@@ -52,6 +54,7 @@ export function useRegisterFlow() {
     tocSlots: { toc1: null, toc2: null, toc3: null },
     title: "",
     author: "",
+    genre: "",
     naverCoverUrl: null,
     tocResult: null,
     tocError: null,
@@ -280,6 +283,8 @@ export function useRegisterFlow() {
           typeof data.title === "string" ? data.title.trim() : "";
         const extractedAuthor =
           typeof data.author === "string" ? data.author.trim() : "";
+        const extractedGenre =
+          typeof data.genre === "string" ? data.genre.trim() : "";
 
         setState((s) => ({
           ...s,
@@ -287,9 +292,10 @@ export function useRegisterFlow() {
           coverExtractError: null,
           coverStatus: "done",
           cover: s.cover ? { ...s.cover, status: "done" } : null,
-          // 사용자가 이미 입력한 값은 덮지 않음.
+          // 사용자가 이미 입력한 값은 덮지 않음. 장르는 사용자가 직접 입력할 필드가 아니라 항상 덮음.
           title: s.title || extractedTitle,
           author: s.author || extractedAuthor,
+          genre: extractedGenre || s.genre,
         }));
       } catch (e) {
         setState((s) => ({

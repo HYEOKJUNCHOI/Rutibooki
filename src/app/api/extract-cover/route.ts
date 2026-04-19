@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 // 목차 추출과 달리 단일 이미지 + base64 data URL 을 JSON body 로 받는다
 // (클라이언트에서 카메라로 찍은 한 장을 바로 전송하는 흐름에 맞춤).
 
-const PROMPT = `이 책 표지 이미지에서 제목, 부제, 저자, 출판사를 추출해줘.
+const PROMPT = `이 책 표지 이미지에서 제목, 부제, 저자, 출판사, 그리고 장르를 추출해줘.
+장르는 다음 중에서 하나로 분류(가장 가까운 것): 자기계발, 경영/경제, 에세이, 소설, 인문, 과학, 역사, 예술, 심리, 철학, 종교, 건강, 육아, 실용, 어린이, 만화, 시, 기타.
 JSON으로만 응답해:
-{"title":"...", "subtitle":"...", "author":"...", "publisher":"..."}
+{"title":"...", "subtitle":"...", "author":"...", "publisher":"...", "genre":"..."}
 찾지 못한 필드는 빈 문자열. 설명·코드블록 금지.`;
 
 interface ExtractCoverBody {
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       subtitle: typeof parsed.subtitle === "string" ? parsed.subtitle : "",
       author: typeof parsed.author === "string" ? parsed.author : "",
       publisher: typeof parsed.publisher === "string" ? parsed.publisher : "",
+      genre: typeof parsed.genre === "string" ? parsed.genre : "",
     });
   } catch {
     console.error("[extract-cover] parse fail", text);

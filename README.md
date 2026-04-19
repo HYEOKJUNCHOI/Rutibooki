@@ -10,3 +10,9 @@
 
 ## 개발 시작일
 2026-04-17
+
+## 배포 체크리스트
+- `.env.example` 을 참고해 `.env.local` 채우기 (Firebase, Naver, 선택 LLM 키)
+- Firebase 콘솔 → Firestore → Rules 탭에 `firestore.rules` 내용 그대로 붙여넣고 저장
+- Firebase 콘솔 → Authentication → Sign-in method 에서 Google 공급자 활성화
+- Vercel 환경변수에 `.env.example` 의 모든 키 등록 (NEXT_PUBLIC_* 포함)

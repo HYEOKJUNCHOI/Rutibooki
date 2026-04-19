@@ -1,51 +1,65 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { Book } from "@/types/book";
+import { auth } from "@/lib/firebase";
+import * as booksRepo from "@/lib/firestore/booksRepo";
+import * as readingRepo from "@/lib/firestore/readingRepo";
 
-// T-34~T-38: 사용자가 /register 에서 등록한 책을 보관하는 별도 스토어.
-// 정적 목업(data/books.ts)과 분리 — 등록 플로우의 소스 오브 트루스.
+// 등록 책 상태. Firestore가 source of truth, zustand는 in-memory 캐시.
+// mutation은 Firestore write를 즉시 실행하고, onSnapshot 이 hydrate 로 되돌아 들어온다.
+// persist middleware 는 제거 — 로그인 전 로컬 저장은 더 이상 필요 없음.
 
 interface BooksStore {
   registered: Book[];
-  addBook: (book: Book) => void;
-  updateBook: (id: string, patch: Partial<Book>) => void;
-  removeBook: (id: string) => void;
+  hydrate: (books: Book[]) => void;
+  addBook: (book: Book) => Promise<void>;
+  updateBook: (id: string, patch: Partial<Book>) => Promise<void>;
+  removeBook: (id: string) => Promise<void>;
   getById: (id: string) => Book | undefined;
 }
 
-export const useBooksStore = create<BooksStore>()(
-  persist(
-    (set, get) => ({
-      registered: [],
+// 미로그인 상태에서 mutation이 호출되면 조용히 throw — AuthGate 이후에만 도달해야 함.
+function requireUid(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("booksStore: 로그인 필요");
+  return uid;
+}
 
-      addBook: (book) => {
-        set((state) => {
-          // 동일 id가 있으면 덮어쓰기 (검수 재진입 대응)
-          const without = state.registered.filter((b) => b.id !== book.id);
-          return { registered: [...without, book] };
-        });
-      },
+export const useBooksStore = create<BooksStore>()((set, get) => ({
+  registered: [],
 
-      updateBook: (id, patch) => {
-        set((state) => ({
-          registered: state.registered.map((b) =>
-            b.id === id ? { ...b, ...patch } : b,
-          ),
-        }));
-      },
+  hydrate: (books) => set({ registered: books }),
 
-      removeBook: (id) => {
-        set((state) => ({
-          registered: state.registered.filter((b) => b.id !== id),
-        }));
-      },
+  addBook: async (book) => {
+    const uid = requireUid();
+    // 로컬 optimistic 업데이트 — onSnapshot 도착 전 UI 반영.
+    set((state) => {
+      const without = state.registered.filter((b) => b.id !== book.id);
+      return { registered: [...without, book] };
+    });
+    await booksRepo.addBook(uid, book);
+  },
 
-      getById: (id) => get().registered.find((b) => b.id === id),
-    }),
-    {
-      name: "ruti-books-v1",
-      // readingStore와 동일 패턴 — SSR hydration mismatch 방지.
-      skipHydration: true,
-    },
-  ),
-);
+  updateBook: async (id, patch) => {
+    const uid = requireUid();
+    set((state) => ({
+      registered: state.registered.map((b) =>
+        b.id === id ? { ...b, ...patch } : b,
+      ),
+    }));
+    await booksRepo.updateBook(uid, id, patch);
+  },
+
+  removeBook: async (id) => {
+    const uid = requireUid();
+    set((state) => ({
+      registered: state.registered.filter((b) => b.id !== id),
+    }));
+    // 책 삭제 시 해당 reading 문서도 같이 치우기 — 고아 데이터 방지.
+    await Promise.all([
+      booksRepo.removeBook(uid, id),
+      readingRepo.deleteReadingDoc(uid, id),
+    ]);
+  },
+
+  getById: (id) => get().registered.find((b) => b.id === id),
+}));

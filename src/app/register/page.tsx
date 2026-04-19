@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import RegisterSlot from "@/components/register/RegisterSlot";
@@ -57,11 +57,7 @@ export default function RegisterPage() {
   } = useRegisterFlow();
 
   const addBook = useBooksStore((s) => s.addBook);
-
-  useEffect(() => {
-    // booksStore도 skipHydration 패턴 유지.
-    useBooksStore.persist.rehydrate();
-  }, []);
+  // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
 
   // 필수 2슬롯 + 제목이 있어야 등록 완료 가능.
   const canSave = useMemo(() => {

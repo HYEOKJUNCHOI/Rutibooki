@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AppShell from "@/components/auth/AppShell";
 
 // T-44: PWA 메타. Next 16은 themeColor/viewport를 Viewport 객체로 분리해야 한다.
 // apple-mobile-web-app-* 는 appleWebApp 필드로 자동 생성되고,
@@ -44,7 +45,9 @@ export default function RootLayout({
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }

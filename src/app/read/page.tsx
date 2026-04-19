@@ -38,14 +38,8 @@ function ReadPageInner() {
   const searchParams = useSearchParams();
   const bookId = searchParams.get("bookId") ?? "";
 
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    // readingStore는 skipHydration — 클라이언트 마운트 후 수동 rehydrate.
-    // 반환 타입이 void | Promise<void>라 Promise.resolve로 normalize.
-    Promise.resolve(useReadingStore.persist.rehydrate()).finally(() =>
-      setHydrated(true),
-    );
-  }, []);
+  // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
+  const hydrated = true;
 
   // books는 정적 목업. 찾지 못하면 홈으로.
   const book = books.find((b) => b.id === bookId);

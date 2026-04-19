@@ -4,22 +4,26 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import OnboardingCards from "@/components/onboarding/OnboardingCards";
-import { ONBOARD_FLAG_KEY } from "@/constants/onboarding";
+import { useAuth } from "@/hooks/useAuth";
+import { markOnboarded } from "@/lib/firestore/usersRepo";
 
 // T-31, T-32: /onboarding 라우트. 3장 과학 카드 + 스킵 버튼 + 1회 게이트.
+// 플래그는 Firestore users/{uid}/profile.onboardedAt 로 이전됨. 로컬 저장소 X.
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user } = useAuth();
 
-  const finish = useCallback(() => {
-    // localStorage 접근은 클라이언트에서만. "use client"라 안전.
-    try {
-      window.localStorage.setItem(ONBOARD_FLAG_KEY, "1");
-    } catch {
-      // 사파리 프라이빗 모드 등 저장 실패는 조용히 무시 (재노출 감수).
+  const finish = useCallback(async () => {
+    if (user) {
+      try {
+        await markOnboarded(user.uid);
+      } catch {
+        // Firestore 실패는 조용히 무시 — 재노출 감수. 헌법상 사용자 막지 않음.
+      }
     }
     router.replace("/");
-  }, [router]);
+  }, [router, user]);
 
   return (
     <main

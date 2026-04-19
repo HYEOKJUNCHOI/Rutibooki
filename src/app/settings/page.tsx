@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import MonthlyHeatmap from "@/components/settings/MonthlyHeatmap";
 import { useReadingStore } from "@/store/readingStore";
 import { useBooksStore } from "@/store/booksStore";
 import { books as mockBooks } from "@/data/books";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/hooks/useAuth";
+import { resetOnboarded } from "@/lib/firestore/usersRepo";
 
 // T-39, T-41: /settings 라우트.
 // 내 독서 지도 + 책 관리 + 앱 정보. Streak/연속일 UI 금지.
@@ -24,6 +27,7 @@ const sectionTitleStyle: React.CSSProperties = {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const registered = useBooksStore((s) => s.registered);
   const removeBook = useBooksStore((s) => s.removeBook);
   const resetBook = useReadingStore((s) => s.resetBook);
@@ -35,10 +39,26 @@ export default function SettingsPage() {
     }
   };
 
-  useEffect(() => {
-    useReadingStore.persist.rehydrate();
-    useBooksStore.persist.rehydrate();
-  }, []);
+  // 온보딩 다시보기 — Firestore 플래그 초기화 후 /onboarding 으로.
+  const handleRewatchOnboarding = async () => {
+    if (user) {
+      try {
+        await resetOnboarded(user.uid);
+      } catch (err) {
+        console.warn("[settings] resetOnboarded", err);
+      }
+    }
+    router.push("/onboarding");
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.replace("/login");
+    } catch (err) {
+      console.error("[settings] signOut", err);
+    }
+  };
 
   // 사용자 등록 책 + 목업(V2 예시) 병합. MVP 는 사용자 등록을 우선 노출.
   const allBooks = [...registered, ...mockBooks];
@@ -228,7 +248,7 @@ export default function SettingsPage() {
           {/* 온보딩 다시보기 */}
           <section>
             <button
-              onClick={() => router.push("/onboarding")}
+              onClick={handleRewatchOnboarding}
               style={{
                 width: "100%",
                 background: "transparent",
@@ -243,6 +263,39 @@ export default function SettingsPage() {
               }}
             >
               온보딩 다시보기
+            </button>
+          </section>
+
+          {/* 계정 — 로그아웃. 헌법상 강조 없음, 차분한 테두리 버튼. */}
+          <section>
+            <div style={sectionTitleStyle}>계정</div>
+            {user && (
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "#5A5A5A",
+                  margin: "0 0 10px",
+                }}
+              >
+                {user.email ?? user.displayName ?? user.uid}
+              </p>
+            )}
+            <button
+              onClick={handleLogout}
+              style={{
+                width: "100%",
+                background: "transparent",
+                color: "#9A9A9A",
+                border: "1px solid #2A2A2A",
+                borderRadius: 10,
+                padding: "12px",
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: "-0.2px",
+              }}
+            >
+              로그아웃
             </button>
           </section>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
@@ -18,14 +18,8 @@ export default function LibraryHome() {
   const today = new Date();
   const dateStr = formatDateShort(today);
 
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    Promise.all([
-      Promise.resolve(useReadingStore.persist.rehydrate()),
-      Promise.resolve(useBooksStore.persist.rehydrate()),
-    ]).finally(() => setHydrated(true));
-  }, []);
+  // AuthProvider 가 로그인 직후 pull 로 스토어를 채운다. 여기선 rehydrate 불필요.
+  const hydrated = true;
 
   const registered = useBooksStore((s) => s.registered);
   const statesByBook = useReadingStore((s) => s.statesByBook);

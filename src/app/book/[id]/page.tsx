@@ -6,7 +6,6 @@ import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
 import { formatDateShort, getDayLabel } from "@/utils/reading";
-import { useReadingStore } from "@/store/readingStore";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import TodayCard from "@/components/book/TodayCard";
@@ -29,14 +28,8 @@ export default function BookDetailPage({
   const dateStr = formatDateShort(today);
 
   const [showNudge, setShowNudge] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    Promise.all([
-      Promise.resolve(useReadingStore.persist.rehydrate()),
-      Promise.resolve(useBooksStore.persist.rehydrate()),
-    ]).finally(() => setHydrated(true));
-  }, []);
+  // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
+  const hydrated = true;
 
   const registered = useBooksStore((s) => s.registered);
   // 사용자 등록 책 우선, 없으면 목업에서 찾는다.

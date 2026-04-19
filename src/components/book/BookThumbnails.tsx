@@ -1,5 +1,7 @@
 "use client";
 
+// V2: 서재 진입 시 재사용. MVP(한 권 모드)에서는 import 되지 않음.
+
 import { Book } from "@/types/book";
 import { getDayLabel } from "@/utils/reading";
 

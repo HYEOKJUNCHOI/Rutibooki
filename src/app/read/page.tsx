@@ -1,0 +1,183 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { books } from "@/data/books";
+import { useReadingStore } from "@/store/readingStore";
+import { useBookPace } from "@/store/selectors";
+import { useVisibilityChange } from "@/hooks/useVisibilityChange";
+import { useReadingPhase } from "@/hooks/useReadingPhase";
+import PreReadingPhase from "@/components/read/PreReadingPhase";
+import ReadingBlackScreen from "@/components/read/ReadingBlackScreen";
+import PostReadingInput from "@/components/read/PostReadingInput";
+import PartCompletionModal from "@/components/read/PartCompletionModal";
+import StationTransitionAnimation from "@/components/read/StationTransitionAnimation";
+import DoneScreen from "@/components/read/DoneScreen";
+import AbsenceReturnOverlay from "@/components/read/AbsenceReturnOverlay";
+
+// T-20, T-28: /read 라우트. phase 머신은 useReadingPhase로 분리.
+// useSearchParams()는 Next.js 16에서 Suspense 경계 필수.
+
+export default function ReadPage() {
+  return (
+    <Suspense fallback={<BlackFallback />}>
+      <ReadPageInner />
+    </Suspense>
+  );
+}
+
+function BlackFallback() {
+  // hydration 대기 중에도 눈부심 없도록 검정으로.
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#050505" }} />
+  );
+}
+
+function ReadPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const bookId = searchParams.get("bookId") ?? "";
+
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    // readingStore는 skipHydration — 클라이언트 마운트 후 수동 rehydrate.
+    // 반환 타입이 void | Promise<void>라 Promise.resolve로 normalize.
+    Promise.resolve(useReadingStore.persist.rehydrate()).finally(() =>
+      setHydrated(true),
+    );
+  }, []);
+
+  // books는 정적 목업. 찾지 못하면 홈으로.
+  const book = books.find((b) => b.id === bookId);
+
+  const getState = useReadingStore((s) => s.getState);
+  const commitLog = useReadingStore((s) => s.commitLog);
+  const addQuote = useReadingStore((s) => s.addQuote);
+
+  // 잘못된 bookId 방어.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!book) router.replace("/");
+  }, [hydrated, book, router]);
+
+  if (!hydrated || !book) {
+    return <BlackFallback />;
+  }
+
+  return (
+    <ReadFlow
+      book={book}
+      startPage={getState(book.id).currentPage}
+      commitLog={commitLog}
+      addQuote={addQuote}
+      onHome={() => router.replace("/")}
+    />
+  );
+}
+
+interface ReadFlowProps {
+  book: NonNullable<ReturnType<typeof books.find>>;
+  startPage: number;
+  commitLog: ReturnType<typeof useReadingStore.getState>["commitLog"];
+  addQuote: ReturnType<typeof useReadingStore.getState>["addQuote"];
+  onHome: () => void;
+}
+
+function ReadFlow({
+  book,
+  startPage,
+  commitLog,
+  addQuote,
+  onHome,
+}: ReadFlowProps) {
+  const pace = useBookPace(book.id);
+  const {
+    phase,
+    endPage,
+    crossedPart,
+    goReading,
+    goPost,
+    confirmEndPage,
+    confirmQuote,
+    finishTransition,
+  } = useReadingPhase({ book, startPage, commitLog, addQuote });
+
+  // 딴짓 복귀 오버레이는 phase를 바꾸지 않고 reading 위에 겹쳐 띄운다.
+  const [absenceOpen, setAbsenceOpen] = useState(false);
+  useVisibilityChange({
+    enabled: phase === "reading",
+    onReturn: () => setAbsenceOpen(true),
+  });
+
+  return (
+    <>
+      {phase === "pre" && (
+        <PreReadingPhase
+          book={book}
+          startPage={startPage}
+          pace={pace}
+          onDone={goReading}
+        />
+      )}
+
+      {phase === "reading" && (
+        <>
+          <ReadingBlackScreen
+            book={book}
+            startPage={startPage}
+            startedAt={new Date().toISOString()}
+            onFinish={goPost}
+          />
+          {absenceOpen && (
+            <AbsenceReturnOverlay
+              book={book}
+              currentPage={startPage}
+              onContinue={() => setAbsenceOpen(false)}
+              onStopToday={() => {
+                setAbsenceOpen(false);
+                goPost();
+              }}
+            />
+          )}
+        </>
+      )}
+
+      {phase === "post" && (
+        <PostReadingInput
+          book={book}
+          startPage={startPage}
+          onConfirm={confirmEndPage}
+        />
+      )}
+
+      {phase === "part-modal" && (
+        <PartCompletionModal
+          partIndex={findPartIndex(book, endPage)}
+          onConfirm={confirmQuote}
+        />
+      )}
+
+      {phase === "transition" && (
+        <StationTransitionAnimation
+          book={book}
+          fromPage={startPage}
+          toPage={endPage}
+          crossedPart={crossedPart}
+          onDone={finishTransition}
+        />
+      )}
+
+      {phase === "done" && <DoneScreen onHome={onHome} />}
+    </>
+  );
+}
+
+function findPartIndex(
+  book: NonNullable<ReturnType<typeof books.find>>,
+  page: number,
+): number {
+  const found = book.parts.find(
+    (p) => page >= p.startPage && page <= p.endPage,
+  );
+  return found?.index ?? book.parts[book.parts.length - 1].index;
+}

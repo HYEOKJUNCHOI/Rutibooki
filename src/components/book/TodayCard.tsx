@@ -1,17 +1,41 @@
 "use client";
 
 import { Book } from "@/types/book";
-import { calcProgress } from "@/utils/reading";
+import {
+  calcProgress,
+  formatPageRange,
+  formatPartLabel,
+  getActivePart,
+  getActiveSection,
+} from "@/utils/reading";
+import { estimateMinutes } from "@/utils/estimatePace";
+import { useBookState, useBookPace } from "@/store/selectors";
 
 interface TodayCardProps {
   book: Book;
-  isToday: boolean;
-  dayLabel: string;
 }
 
-export default function TodayCard({ book, isToday, dayLabel }: TodayCardProps) {
-  const progress = calcProgress(book.currentPage, book.totalPages);
-  const remaining = book.totalPages - book.currentPage;
+// T-17: "오늘" 라벨·"목표" 문구 제거. 파트/섹션 라벨 + anchor 시간 문구.
+// 시간 문구는 Pre-reading 원칙을 따라 anchor 용으로만 ("보통 이 분량은 N분 정도 걸려요").
+export default function TodayCard({ book }: TodayCardProps) {
+  const state = useBookState(book.id);
+  const currentPage = state?.currentPage ?? 0;
+
+  // EMA pace는 readingStore에서 책별로 관리 — Book 타입의 avgMinPerPage와 동기화해서 estimateMinutes에 전달.
+  const pace = useBookPace(book.id);
+  const bookWithPace: Book = pace != null ? { ...book, avgMinPerPage: pace } : book;
+
+  // 오늘 읽을 활성 섹션 = 현재 페이지가 속한 섹션. 미시작(0p)이면 첫 섹션.
+  const section = getActiveSection(book, currentPage || 1);
+  const part = getActivePart(book, currentPage || 1);
+
+  const pagesToRead = Math.max(1, section.endPage - (currentPage > 0 ? currentPage : section.startPage - 1));
+  const { min, anchor } = estimateMinutes(bookWithPace, pagesToRead);
+  // 3회 미만(min === null)이면 anchor, 이상이면 EMA min. 두 경우 모두 같은 문구 템플릿.
+  const minutes = min ?? anchor;
+
+  const progress = calcProgress(currentPage, book.totalPages);
+  const remaining = book.totalPages - currentPage;
 
   return (
     <div
@@ -23,7 +47,7 @@ export default function TodayCard({ book, isToday, dayLabel }: TodayCardProps) {
         marginBottom: 16,
       }}
     >
-      {/* 요일 라벨은 헤더에 있으므로 여기선 챕터부터. "오늘/요일" 중복 제거 */}
+      {/* 파트 · 페이지 범위 라벨 — "오늘"이라는 단어는 쓰지 않는다. 분량 제시일 뿐 목표 아님. */}
       <p
         style={{
           fontSize: 15,
@@ -33,16 +57,25 @@ export default function TodayCard({ book, isToday, dayLabel }: TodayCardProps) {
           letterSpacing: "-0.3px",
         }}
       >
-        {book.chapter}
-      </p>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14 }}>
-        <span style={{ fontSize: 13, color: "#00FF7A", fontWeight: 600 }}>약 {book.minutes}분</span>
-        <span style={{ fontSize: 12, color: "#5A5A5A" }}>
-          · {isToday ? "오늘 분량" : `${dayLabel}요일 분량`}
+        {formatPartLabel(part.index)}
+        <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
+        <span style={{ color: "#8A8A8A", fontWeight: 500 }}>
+          {formatPageRange(section.startPage, section.endPage)}
         </span>
-      </div>
+      </p>
+      {/* 시간 문구는 anchor — 목표 시간 아님. "보통 이 분량은 N분 정도 걸려요" 고정 템플릿. */}
+      <p
+        style={{
+          fontSize: 12,
+          color: "#5A5A5A",
+          marginBottom: 14,
+          letterSpacing: "-0.3px",
+        }}
+      >
+        보통 이 분량은 <span style={{ color: "#8A8A8A", fontWeight: 600 }}>{minutes}분</span> 정도 걸려요
+      </p>
 
-      {/* 진행 바 — 바 하나만 단일 의미로. 양끝 라벨과 중앙 요약으로 설명 */}
+      {/* 진행 바 — 책 전체 대비 현재 페이지. 단일 의미. */}
       <div style={{ position: "relative", marginBottom: 8 }}>
         <div
           style={{
@@ -64,7 +97,6 @@ export default function TodayCard({ book, isToday, dayLabel }: TodayCardProps) {
             }}
           />
         </div>
-        {/* 현재 위치 점 — 바 위의 "지금 여기" 마커 */}
         <div
           style={{
             position: "absolute",
@@ -84,7 +116,7 @@ export default function TodayCard({ book, isToday, dayLabel }: TodayCardProps) {
       {/* 바 양끝 라벨 — "여기까지 왔다 / 여기가 끝" */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 12, color: "#00FF7A", fontWeight: 600, letterSpacing: "-0.3px" }}>
-          {book.currentPage}p
+          {currentPage}p
           <span style={{ fontSize: 10, color: "#5A5A5A", fontWeight: 400, marginLeft: 4 }}>
             여기까지 왔어요
           </span>

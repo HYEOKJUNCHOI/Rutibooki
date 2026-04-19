@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Book } from "@/types/book";
+import { getActivePart } from "@/utils/reading";
+import { useBookState } from "@/store/selectors";
 import JourneyPath from "./JourneyPath";
 
 const SWIPE_THRESHOLD = 60;
@@ -26,14 +28,24 @@ export default function BookCoverSwipe({
   const startX = useRef(0);
   const didSwipe = useRef(false);
 
-  const prevIdx = (selectedIdx - 1 + books.length) % books.length;
-  const nextIdx = (selectedIdx + 1) % books.length;
   const selectedBook = books[selectedIdx];
+  // MVP는 한 권 모드 — books.length === 1이면 스와이프 비활성, 옆 책 프리뷰도 숨김.
+  const swipeEnabled = books.length > 1;
+
+  const prevIdx = swipeEnabled ? (selectedIdx - 1 + books.length) % books.length : selectedIdx;
+  const nextIdx = swipeEnabled ? (selectedIdx + 1) % books.length : selectedIdx;
+
+  // 실 진행도 기반 파트 계산 — 하드코딩 7/4 제거.
+  const state = useBookState(selectedBook.id);
+  const currentPage = state?.currentPage ?? 0;
+  const totalParts = selectedBook.parts.length;
+  const currentPart = getActivePart(selectedBook, currentPage || 1).index;
 
   const swipeProgress = Math.min(Math.abs(dragX) / SWIPE_THRESHOLD, 1);
   const swipeDir = dragX < 0 ? "left" : "right";
 
   const onDragStart = (clientX: number) => {
+    if (!swipeEnabled) return;
     startX.current = clientX;
     didSwipe.current = false;
     setIsDragging(true);
@@ -47,6 +59,11 @@ export default function BookCoverSwipe({
   };
 
   const onDragEnd = () => {
+    if (!swipeEnabled) {
+      setDragX(0);
+      setIsDragging(false);
+      return;
+    }
     if (dragX < -SWIPE_THRESHOLD) {
       onSelect(nextIdx);
       didSwipe.current = true;
@@ -63,11 +80,6 @@ export default function BookCoverSwipe({
     if (didSwipe.current) return;
     setIsFlipped((v) => !v);
   };
-
-  // 책 데이터에서 파트 정보를 꺼내오고 싶지만, 아직 스키마에 없으므로 임시 기본값.
-  // TODO: Book 타입에 parts / currentPart 추가되면 그걸 사용.
-  const totalParts = 7;
-  const currentPart = 4;
 
   return (
     <div
@@ -91,8 +103,8 @@ export default function BookCoverSwipe({
           pointerEvents: "none",
         }}
       />
-      {/* 스와이프 중 옆 책 미리보기 — 뒤집힌 상태에서는 숨김 */}
-      {!isFlipped && swipeDir === "right" && isDragging && (
+      {/* 스와이프 중 옆 책 미리보기 — 뒤집힌 상태 & 한 권 모드에서는 숨김 */}
+      {swipeEnabled && !isFlipped && swipeDir === "right" && isDragging && (
         <div
           style={{
             position: "absolute",
@@ -117,7 +129,7 @@ export default function BookCoverSwipe({
           )}
         </div>
       )}
-      {!isFlipped && swipeDir === "left" && isDragging && (
+      {swipeEnabled && !isFlipped && swipeDir === "left" && isDragging && (
         <div
           style={{
             position: "absolute",
@@ -197,7 +209,7 @@ export default function BookCoverSwipe({
             )}
           </div>
 
-          {/* 뒷면 — 독서 여정 (버스노선) */}
+          {/* 뒷면 — 독서 여정 (버스노선). 실 파트 데이터로 표시. */}
           <div
             style={{
               position: "absolute",

@@ -10,22 +10,19 @@ interface LibraryCardProps {
   onClick: () => void;
 }
 
-// 서재 카드 — 작은 책 사이즈(약 64×86). 제목 띠지 + 뱃지 2종.
+// 서재 카드 — 작은 책 사이즈(약 64×86). 제목 띠지 + 진행률 뱃지.
 //
-// 뱃지(#7, #18):
-// - 좌상(넘패드 7): ⭐ 좋아요 / 📎 새 책(안 펼침) — ⭐ 우선
+// 뱃지:
 // - 상단 중앙(넘패드 8): "37%" 진행률 (진행 중일 때만)
 export default function LibraryCard({ book, cover, onClick }: LibraryCardProps) {
   const state = useBookState(book.id);
   const currentPage = state?.currentPage ?? 0;
   const progress = calcProgress(currentPage, book.totalPages);
-  const isFresh = currentPage === 0;
-  const isFavorite = state?.favorite === true;
 
   return (
     <button
       onClick={onClick}
-      aria-label={book.title + (isFavorite ? " (좋아요)" : "")}
+      aria-label={book.title}
       style={{
         position: "relative",
         width: 64,
@@ -69,22 +66,6 @@ export default function LibraryCard({ book, cover, onClick }: LibraryCardProps) 
           }}
         >
           {book.title.slice(0, 8)}
-        </div>
-      )}
-
-      {/* 좌상 뱃지 (넘패드 7) — ⭐ 좋아요 > 📎 새 책 */}
-      {(isFavorite || isFresh) && (
-        <div
-          style={{
-            position: "absolute",
-            top: 3,
-            left: 3,
-            fontSize: 11,
-            lineHeight: 1,
-            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.9))",
-          }}
-        >
-          {isFavorite ? "⭐" : "📎"}
         </div>
       )}
 

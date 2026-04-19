@@ -43,8 +43,6 @@ interface ReadingStore {
   }) => void;
   // #10: 세션 취소용 — 진행 중이던 draft 만 조용히 파기.
   clearDraft: () => void;
-  // (#9) 책별 읽는 요일 설정 (0=일 ~ 6=토). 빈 배열이면 "매일".
-  updateWeekdays: (bookId: string, weekdays: number[]) => void;
   resetBook: (bookId: string) => void;
 }
 
@@ -53,15 +51,12 @@ function currentUid(): string | null {
 }
 
 // 등록된 책들에 대해 기본 ReadingState를 만들어 둔다 — 목업 포함 초기 진입 대응.
-// [MOCKUP] 서재 뱃지 시각 검증용 — 진행 중·새책·좋아요 상태가 한 화면에 보이도록 분배.
+// [MOCKUP] 서재 뱃지 시각 검증용 — 진행 중 상태가 한 화면에 보이도록 분배.
 // Firestore 가 채워지면 자동으로 덮어써짐 — 실사용에는 영향 없음.
-const MOCK_STATE_OVERRIDES: Record<string, { pageRatio?: number; favorite?: boolean }> = {
+const MOCK_STATE_OVERRIDES: Record<string, { pageRatio?: number }> = {
   primitive: { pageRatio: 0.37 },      // 37% — 진행 중
   immutable: { pageRatio: 0.72 },       // 72% — 진행 중
-  "money-equation": { pageRatio: 0.58, favorite: true }, // 좋아요 + 진행 중
-  "money-talk": { favorite: true },     // 좋아요 + 새 책
-  hooked: { favorite: true },           // 좋아요 + 새 책
-  // system / gratitude → 기본(0%, 📎 새 책)
+  "money-equation": { pageRatio: 0.58 }, // 진행 중
 };
 
 function makeInitialStates(): Record<string, ReadingState> {
@@ -76,7 +71,6 @@ function makeInitialStates(): Record<string, ReadingState> {
       activePartIndex: 1,
       activeSectionIndex: 0,
       lastOpenedAt: now,
-      favorite: override.favorite,
     };
   }
   return out;
@@ -222,32 +216,6 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
   saveDraft: (draft) => set({ draft }),
 
   clearDraft: () => set({ draft: null }),
-
-  updateWeekdays: (bookId, weekdays) => {
-    set((state) => {
-      const prev = state.statesByBook[bookId];
-      const base: ReadingState =
-        prev ?? {
-          bookId,
-          currentPage: 0,
-          activePartIndex: 1,
-          activeSectionIndex: 0,
-          lastOpenedAt: new Date().toISOString(),
-        };
-      return {
-        statesByBook: {
-          ...state.statesByBook,
-          [bookId]: { ...base, weekdays },
-        },
-      };
-    });
-    const uid = currentUid();
-    if (uid) {
-      readingRepo
-        .updateWeekdays(uid, bookId, weekdays)
-        .catch((err) => console.error("[readingStore] updateWeekdays", err));
-    }
-  },
 
   resetBook: (bookId) => {
     set((state) => {

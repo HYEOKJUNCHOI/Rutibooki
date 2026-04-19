@@ -8,12 +8,6 @@ export interface ReadingState {
   activePartIndex: number;
   activeSectionIndex: number;
   lastOpenedAt: string; // ISO
-  // "좋았던 책" — 추천용 서재 진입점. 완독 여부와 무관하게 토글.
-  // (#18) 초기값 false/undefined. Firestore 는 users/{uid}/readingState/{bookId}.favorite 로 저장.
-  favorite?: boolean;
-  // (#9) 이 책을 읽을 요일(0=일~6=토). 비어있거나 undefined 면 "매일".
-  // 홈 진입 시 오늘 요일에 해당하는 책들 중 lastOpenedAt 오래된 순으로 우선 노출 (인터리빙).
-  weekdays?: number[];
 }
 
 export interface ReadingLog {

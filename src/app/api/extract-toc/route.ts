@@ -134,17 +134,25 @@ interface RawSectionItem {
   title?: string;
   page?: number;
 }
-// Gemini 가 프롬프트에 따라 필드명을 바꿔버림 — 별칭 다 받기.
-//   (section_title | title) · (section_id | chapter) · (items | subsections | children)
+// Gemini 가 호출마다 필드명을 바꿔버림 — 별칭 다 받기.
+//   (section_title | title | chapter_title) · (section_id | chapter | chapter_number)
+//   (items | subsections | children | sections)
 interface RawSection {
   section_id?: string;
   chapter?: string;
+  chapter_number?: string;
   section_title?: string;
   title?: string;
+  chapter_title?: string;
   page?: number;
   items?: RawSectionItem[];
   subsections?: RawSectionItem[];
   children?: RawSectionItem[];
+  sections?: RawSectionItem[];
+}
+interface RawLeaf {
+  title?: string;
+  page?: number;
 }
 interface RawResponse {
   book_title?: string;
@@ -152,6 +160,11 @@ interface RawResponse {
   parts?: unknown[];
   totalPages?: number;
   confidence?: number;
+  // 래퍼 포맷들.
+  table_of_contents?: RawResponse;
+  chapters?: RawSection[];
+  prologue?: RawLeaf;
+  epilogue?: RawLeaf;
 }
 
 interface OurSection {
@@ -179,7 +192,17 @@ function normalizeTocResponse(raw: RawResponse): OurResponse {
     return raw as unknown as OurResponse;
   }
 
-  const webSections = Array.isArray(raw.sections) ? raw.sections : [];
+  // table_of_contents 래퍼 언랩.
+  if (raw.table_of_contents) raw = { ...raw.table_of_contents };
+
+  // chapters 배열을 sections 로, prologue/epilogue 를 앞/뒤에 부착.
+  const flat: RawSection[] = [];
+  if (raw.prologue) flat.push(raw.prologue as RawSection);
+  if (Array.isArray(raw.chapters)) flat.push(...raw.chapters);
+  if (Array.isArray(raw.sections)) flat.push(...raw.sections);
+  if (raw.epilogue) flat.push(raw.epilogue as RawSection);
+
+  const webSections = flat;
   if (webSections.length === 0) {
     return { parts: [], totalPages: raw.totalPages ?? 0, confidence: 0 };
   }
@@ -190,11 +213,11 @@ function normalizeTocResponse(raw: RawResponse): OurResponse {
   // - items 없는 최상위(프롤로그·에필로그) 는 단독 파트로 (sections 1개).
   const parts: OurPart[] = [];
   for (const s of webSections) {
-    const tag = s.section_id ?? s.chapter ?? "";
-    const name = s.section_title ?? s.title ?? "";
+    const tag = s.section_id ?? s.chapter ?? s.chapter_number ?? "";
+    const name = s.section_title ?? s.chapter_title ?? s.title ?? "";
     const rawTitle = (tag ? `${tag}: ` : "") + name;
     const title = rawTitle.trim() || "무제";
-    const items = s.items ?? s.subsections ?? s.children;
+    const items = s.items ?? s.subsections ?? s.children ?? s.sections;
     if (Array.isArray(items) && items.length > 0) {
       const sections: OurSection[] = items.map((it) => ({
         title: it.title ?? "",

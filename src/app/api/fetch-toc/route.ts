@@ -8,6 +8,9 @@ interface AladinLookupResponse {
   item?: Array<{
     isbn13?: string;
     title?: string;
+    author?: string;
+    publisher?: string;
+    cover?: string;
     subInfo?: {
       toc?: string;
       itemPage?: number;
@@ -67,10 +70,21 @@ export async function GET(req: NextRequest) {
   }
 
   const item = data.item?.[0];
-  const toc = item?.subInfo?.toc ?? "";
-  const itemPage = Number(item?.subInfo?.itemPage ?? 0) || 0;
+  if (!item) {
+    return NextResponse.json({ toc: "", error: "no_match" });
+  }
+  const toc = item.subInfo?.toc ?? "";
+  const itemPage = Number(item.subInfo?.itemPage ?? 0) || 0;
 
-  return NextResponse.json({ toc, itemPage });
+  return NextResponse.json({
+    toc,
+    itemPage,
+    title: item.title ?? "",
+    author: item.author ?? "",
+    publisher: item.publisher ?? "",
+    cover: item.cover ?? "",
+    isbn13: item.isbn13 ?? "",
+  });
 }
 
 function stripJsonpWrapper(raw: string): string {

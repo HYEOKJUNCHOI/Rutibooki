@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import RegisterSlot from "./RegisterSlot";
+import BarcodeScanner from "./BarcodeScanner";
 import {
   TOC_SLOT_KEYS,
   TocSlotKey,
@@ -10,6 +11,7 @@ import {
 } from "@/hooks/useRegisterFlow";
 import { useBooksStore } from "@/store/booksStore";
 import { startBackgroundRegistration } from "@/lib/registerBookInBackground";
+import { registerByIsbn } from "@/lib/registerByIsbn";
 import { Book } from "@/types/book";
 import {
   coverHintStyle,
@@ -44,6 +46,7 @@ export default function ReviewForm({ flow }: Props) {
 
   const addBook = useBooksStore((s) => s.addBook);
   const [registering, setRegistering] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   // "등록" 활성화 조건 — 표지 1장이면 충분. 나머지는 전부 백그라운드가 메움.
   const canRegister = useMemo(() => {
@@ -97,8 +100,73 @@ export default function ReviewForm({ flow }: Props) {
     }
   };
 
+  // 바코드 스캔 성공 → 알라딘 ISBN 룩업 한 방에 등록 완료.
+  // Gemini 0회, 평균 1~2초. 실패 시 아래 사진 경로가 그대로 대기 중이라 복귀 간단.
+  const handleBarcodeDetected = async (isbn13: string) => {
+    setScanning(false);
+    setRegistering(true);
+    try {
+      const id = `book-${Date.now()}`;
+      const shell: Book = {
+        id,
+        title: "분석 중…",
+        author: "",
+        searchQuery: isbn13,
+        totalPages: 0,
+        parts: [],
+        registeredAt: new Date().toISOString(),
+        status: "extracting",
+        extractionStep: "알라딘 조회중",
+      };
+      await addBook(shell);
+      router.replace("/");
+      // fire-and-forget — 서재에서 진행바로 상태 피드백.
+      void registerByIsbn({ isbn13, shellId: id });
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   return (
     <>
+      {scanning && (
+        <BarcodeScanner
+          onDetect={handleBarcodeDetected}
+          onClose={() => setScanning(false)}
+        />
+      )}
+
+      {/* 바코드 경로 — 표지 사진보다 정확하고 무료(Gemini 0회). 기본 CTA. */}
+      <button
+        onClick={() => setScanning(true)}
+        disabled={registering}
+        style={{
+          padding: "14px 16px",
+          background: "#00FF7A",
+          color: "#000",
+          border: "none",
+          borderRadius: 10,
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          letterSpacing: "-0.3px",
+          boxShadow: "0 2px 8px rgba(0,255,122,0.25)",
+          fontFamily: "inherit",
+        }}
+      >
+        📷 바코드로 즉시 등록
+      </button>
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 10,
+          color: "#5A5A5A",
+          marginTop: -12,
+        }}
+      >
+        책 뒷면 ISBN 바코드를 찍으면 1초 안에 끝납니다
+      </div>
+
       <section>
         <div style={sectionTitleStyle}>표지</div>
         <div style={{ width: "50%" }}>

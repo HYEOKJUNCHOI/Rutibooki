@@ -59,7 +59,7 @@ export default function FullJourney({
     partYs.push(COVER_BOTTOM_Y + FIRST_STEP_Y + i * STEP_Y);
   }
   // 마지막 PART → 완독은 기본 간격의 약 80% — 절반은 너무 붙고, 풀은 너무 텅 빔.
-  const goalY = partYs[partYs.length - 1] + STEP_Y * 0.8;
+  const goalY = partYs[partYs.length - 1] + STEP_Y * 0.7;
   // 현재 파트의 섹션 스트립이 라벨 블록 아래로 내려오므로 svgHeight 는 여유를 둠.
   const svgHeight = goalY + (currentPartIdx >= 0 ? 24 : 12);
 

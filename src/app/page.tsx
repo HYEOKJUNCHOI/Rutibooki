@@ -12,6 +12,7 @@ import BookActionSheet from "@/components/library/BookActionSheet";
 import BarcodeScanner from "@/components/register/BarcodeScanner";
 import { Book } from "@/types/book";
 import { normalizeAuthor } from "@/utils/normalizeAuthor";
+import { updateTocForExistingBook } from "@/lib/registerBookInBackground";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
@@ -222,6 +223,12 @@ export default function LibraryHome() {
         onRescanBarcode={(b) => {
           setSheetBook(null);
           setRescanBook(b);
+        }}
+        onUpdateToc={async (b, files) => {
+          setSheetBook(null);
+          // 백그라운드 추출 — 카드에 '목차 정리중' extractionStep 이 떠서 진행 상태는 카드에서 확인 가능.
+          const ok = await updateTocForExistingBook(b.id, files);
+          if (!ok) alert("목차 추출 실패 — 사진을 다시 확인해주세요");
         }}
       />
 

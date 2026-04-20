@@ -290,6 +290,38 @@ async function clearStatusField(shellId: string) {
   }
 }
 
+// 이미 등록된 책에 목차만 나중에 덧붙이거나 교체할 때 사용.
+// 사용 예: 서재 길게누름 → "목차 등록" 버튼.
+// 성공 시 parts/totalPages 덮어쓰기. 실패 시 false 반환.
+export async function updateTocForExistingBook(
+  bookId: string,
+  tocFiles: File[],
+): Promise<boolean> {
+  if (tocFiles.length === 0) return false;
+  const { updateBook, registered } = useBooksStore.getState();
+  const existing = registered.find((b) => b.id === bookId);
+  const aladinTotal = existing?.totalPages ?? 0;
+
+  await updateBook(bookId, { extractionStep: "목차 정리중" });
+  try {
+    const result = await callExtractToc(tocFiles, aladinTotal);
+    if (!result) {
+      await clearExtractionStep(bookId);
+      return false;
+    }
+    await updateBook(bookId, {
+      parts: result.parts,
+      totalPages: result.totalPages,
+    });
+    await clearExtractionStep(bookId);
+    return true;
+  } catch (e) {
+    console.warn("[update-toc] fail", e);
+    await clearExtractionStep(bookId);
+    return false;
+  }
+}
+
 interface ExtractTocResult {
   parts: BookPart[];
   totalPages: number;

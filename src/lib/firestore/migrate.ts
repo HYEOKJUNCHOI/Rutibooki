@@ -1,5 +1,3 @@
-"use client";
-
 // 기존 localStorage (zustand persist) 데이터를 Firestore 로 1회 마이그레이션.
 // 중복 방지: users/{uid}/profile.migratedAt 있으면 스킵.
 // 대상 키: ruti-books-v1, ruti-reading-v1, ruti-onboarded-v1.

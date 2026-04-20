@@ -1,5 +1,3 @@
-"use client";
-
 // reading / logs / quotes 를 책별·세션별로 관리하는 Firestore 레포.
 // - users/{uid}/reading/{bookId}       ReadingState + paceByBook[bookId] 병합 저장
 // - users/{uid}/logs/{logId}           세션 로그
@@ -11,12 +9,10 @@ import {
   doc,
   getDoc,
   getDocs,
-  onSnapshot,
   query,
   setDoc,
   where,
   writeBatch,
-  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type {
@@ -91,15 +87,6 @@ export async function listReadingStates(
   return snap.docs.map((d) => d.data() as ReadingDoc);
 }
 
-export function onReadingSnapshot(
-  uid: string,
-  cb: (states: ReadingDoc[]) => void,
-): Unsubscribe {
-  return onSnapshot(readingCol(uid), (snap) => {
-    cb(snap.docs.map((d) => d.data() as ReadingDoc));
-  });
-}
-
 // --- logs ---
 
 export async function commitLog(
@@ -114,15 +101,6 @@ export async function listLogs(uid: string): Promise<ReadingLog[]> {
   return snap.docs.map((d) => d.data() as ReadingLog);
 }
 
-export function onLogsSnapshot(
-  uid: string,
-  cb: (logs: ReadingLog[]) => void,
-): Unsubscribe {
-  return onSnapshot(logsCol(uid), (snap) => {
-    cb(snap.docs.map((d) => d.data() as ReadingLog));
-  });
-}
-
 // --- quotes ---
 
 export async function addQuote(uid: string, entry: QuoteEntry): Promise<void> {
@@ -132,15 +110,6 @@ export async function addQuote(uid: string, entry: QuoteEntry): Promise<void> {
 export async function listQuotes(uid: string): Promise<QuoteEntry[]> {
   const snap = await getDocs(quotesCol(uid));
   return snap.docs.map((d) => d.data() as QuoteEntry);
-}
-
-export function onQuotesSnapshot(
-  uid: string,
-  cb: (quotes: QuoteEntry[]) => void,
-): Unsubscribe {
-  return onSnapshot(quotesCol(uid), (snap) => {
-    cb(snap.docs.map((d) => d.data() as QuoteEntry));
-  });
 }
 
 // --- reset ---

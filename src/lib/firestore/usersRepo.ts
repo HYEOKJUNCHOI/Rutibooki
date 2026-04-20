@@ -1,5 +1,3 @@
-"use client";
-
 // users/{uid} 프로필 업서트·조회.
 // 로그인 시 1회 호출해 profile 기본 필드를 채운다.
 

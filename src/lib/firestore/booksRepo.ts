@@ -1,5 +1,3 @@
-"use client";
-
 // users/{uid}/books/{bookId} — 사용자가 등록한 책 CRUD + 실시간 구독.
 // Book 타입 전체를 그대로 저장. 문서 id = book.id.
 
@@ -8,10 +6,8 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  onSnapshot,
   setDoc,
   updateDoc,
-  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Book } from "@/types/book";
@@ -45,11 +41,3 @@ export async function listBooks(uid: string): Promise<Book[]> {
   return snap.docs.map((d) => d.data() as Book);
 }
 
-export function onBooksSnapshot(
-  uid: string,
-  cb: (books: Book[]) => void,
-): Unsubscribe {
-  return onSnapshot(booksCol(uid), (snap) => {
-    cb(snap.docs.map((d) => d.data() as Book));
-  });
-}

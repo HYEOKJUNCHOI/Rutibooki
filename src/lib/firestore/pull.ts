@@ -1,5 +1,3 @@
-"use client";
-
 // 로그인 직후 1회 Firestore 상태를 읽어 zustand 스토어에 주입한다.
 // 실시간 구독(onSnapshot) 은 필요 시 추후 붙일 수 있지만 MVP 는 pull + 개별 write 만으로 충분.
 

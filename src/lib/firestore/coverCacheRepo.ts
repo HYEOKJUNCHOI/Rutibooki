@@ -1,5 +1,3 @@
-"use client";
-
 // 표지 검색 결과 캐시. 전체 유저 공유 — coverCache/{searchQueryHash}.
 // TTL은 Firestore가 자동 지원 안 하므로 updatedAt + 30일 stale 체크를 코드에서.
 

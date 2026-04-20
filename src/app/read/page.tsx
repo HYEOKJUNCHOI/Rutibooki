@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { books as mockBooks } from "@/data/books";
 import { Book } from "@/types/book";
@@ -118,7 +118,8 @@ function ReadFlow({
 
   // [Major M-1] 세션 시작 시각은 한 번만 확정. 이전엔 렌더마다 new Date()를 넘겨
   // ReadingBlackScreen 내부 useEffect deps 변화 → 2분 autosave 타이머가 매번 리셋됐음.
-  const startedAtRef = useRef<string>(new Date().toISOString());
+  // React 19 react-hooks/refs 규칙상 ref.current 를 렌더 중 읽지 말고 useMemo 로 결정.
+  const startedAt = useMemo(() => new Date().toISOString(), []);
   useVisibilityChange({
     enabled: phase === "reading",
     onReturn: () => setAbsenceOpen(true),
@@ -140,7 +141,7 @@ function ReadFlow({
           <ReadingBlackScreen
             book={book}
             startPage={startPage}
-            startedAt={startedAtRef.current}
+            startedAt={startedAt}
             onFinish={goPost}
             onCancel={onCancel}
           />

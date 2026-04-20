@@ -15,6 +15,8 @@ interface BooksStore {
   updateBook: (id: string, patch: Partial<Book>) => Promise<void>;
   removeBook: (id: string) => Promise<void>;
   getById: (id: string) => Book | undefined;
+  // [Major M-2] 로그아웃 시 이전 사용자 데이터를 비워 다른 계정 로그인 시 섞이지 않게.
+  reset: () => void;
 }
 
 // 미로그인 상태에서 mutation이 호출되면 조용히 throw — AuthGate 이후에만 도달해야 함.
@@ -62,4 +64,6 @@ export const useBooksStore = create<BooksStore>()((set, get) => ({
   },
 
   getById: (id) => get().registered.find((b) => b.id === id),
+
+  reset: () => set({ registered: [] }),
 }));

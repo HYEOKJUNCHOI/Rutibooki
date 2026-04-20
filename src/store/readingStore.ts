@@ -45,6 +45,8 @@ interface ReadingStore {
   // #10: 세션 취소용 — 진행 중이던 draft 만 조용히 파기.
   clearDraft: () => void;
   resetBook: (bookId: string) => void;
+  // [Major M-2] 로그아웃 시 전체 상태 초기화. 목업 기본값만 남기고 hydrate 로 덮어쓸 준비.
+  reset: () => void;
 }
 
 function currentUid(): string | null {
@@ -86,9 +88,11 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
   draft: null,
 
   hydrate: ({ statesByBook, logs, quotes, paceByBook }) => {
-    // 목업 기본값은 유지하되, Firestore 에 있는 값은 덮어쓴다.
-    set((state) => ({
-      statesByBook: { ...state.statesByBook, ...statesByBook },
+    // [Major M-2] 이전엔 기존 state 위에 merge 해서 A 사용자 잔여 진행률이 B 세션에 스며들었음.
+    // hydrate 는 인증 성공 직후 1회 호출되므로 항상 Firestore 값으로 완전 교체한다.
+    // 목업 책은 makeInitialStates 로 다시 시딩 후 그 위에 Firestore 값을 덮어씀.
+    set(() => ({
+      statesByBook: { ...makeInitialStates(), ...statesByBook },
       logs,
       quotes,
       paceByBook,
@@ -221,6 +225,15 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
   saveDraft: (draft) => set({ draft }),
 
   clearDraft: () => set({ draft: null }),
+
+  reset: () =>
+    set({
+      statesByBook: makeInitialStates(),
+      logs: [],
+      quotes: [],
+      paceByBook: {},
+      draft: null,
+    }),
 
   resetBook: (bookId) => {
     set((state) => {

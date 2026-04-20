@@ -6,6 +6,8 @@ import { signOut } from "firebase/auth";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { useBooksStore } from "@/store/booksStore";
+import { useReadingStore } from "@/store/readingStore";
 import {
   getUserProfile,
   updateLongPressMs,
@@ -91,6 +93,10 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      // [Major M-2] 다른 계정으로 재로그인 시 이전 사용자 잔여 데이터가 섞이지 않도록
+      // signOut 직후 zustand 스토어를 초기화한다. AuthProvider 가 새 uid 로 hydrate 한다.
+      useBooksStore.getState().reset();
+      useReadingStore.getState().reset();
       router.replace("/login");
     } catch (err) {
       console.error("[settings] signOut", err);

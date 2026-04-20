@@ -62,7 +62,7 @@ export default function RegisterPage() {
   const [saving, setSaving] = useState(false);
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
 
-  // 숨겨진 file input 을 버튼 클릭으로 트리거. capture="environment" 는 모바일에서 후면 카메라.
+  // 숨겨진 file input 을 버튼 클릭으로 트리거. capture 미지정 — 카메라/앨범 모두 허용.
   const coverScanInputRef = useRef<HTMLInputElement | null>(null);
   const handleScanCoverClick = () => {
     coverScanInputRef.current?.click();
@@ -230,12 +230,12 @@ export default function RegisterPage() {
               </p>
             )}
 
-            {/* 표지 촬영 → Gemini Vision → 제목/저자 자동 채움. */}
+            {/* 표지 스캔 → Gemini Vision → 제목/저자 자동 채움.
+                capture 미지정 — 사용자가 "카메라 / 앨범" 선택 가능. */}
             <input
               ref={coverScanInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleScanCoverPick}
               style={{ display: "none" }}
             />

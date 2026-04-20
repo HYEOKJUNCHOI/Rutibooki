@@ -154,11 +154,12 @@ export default function RegisterSlot({
         </button>
       )}
 
+      {/* capture 속성 제거 — 붙이면 모바일이 곧장 카메라로 진입, 앨범 선택 불가.
+          accept="image/*" 만 두면 OS 가 "카메라 / 사진 보관함" 선택창을 띄움. */}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={onChange}
         style={{ display: "none" }}
       />

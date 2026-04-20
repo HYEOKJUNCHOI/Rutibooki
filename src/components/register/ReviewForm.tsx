@@ -137,9 +137,11 @@ export default function ReviewForm({ flow }: Props) {
     const coverFile = state.cover?.file;
     if (!coverFile) return;
     setOverlayOpen(true);
-    // 표지 OCR + 목차 추출 병렬 — Gemini 호출 2건이 동시에 날아감.
-    // 네트워크 병목은 있지만 사용자 대기 체감 시간이 짧아져 체크리스트 연출이 자연스러움.
-    await Promise.all([extractCoverFromImage(coverFile), extractToc()]);
+    // 표지 → 목차 직렬. 병렬로 2건 동시 호출 시 Gemini rate limit(429) 에 걸리거나
+    // 알라딘 보강 결과(totalPages) 가 목차 후처리에 간당간당하게 못 들어옴.
+    // 표지 먼저 끝내면 aladinMatch 세팅 → 목차 단계에서 바로 활용 가능.
+    await extractCoverFromImage(coverFile);
+    await extractToc();
   };
 
   const handleSave = async () => {

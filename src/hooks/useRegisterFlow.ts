@@ -198,8 +198,31 @@ export function useRegisterFlow() {
       tocSlots: markTocStatus(s.tocSlots, "extracting"),
     }));
 
+    // 원본 사진(iPhone 은 10MB 가 흔함) 을 그대로 올리면 서버 8MB 리밋에 걸리거나
+    // Gemini 응답이 느려진다. JPEG 1600px 로 축소 — OCR 해상도 충분.
+    // 축소 실패는 원본 File 그대로 사용(폴백).
+    const resized: Blob[] = await Promise.all(
+      files.map(async (f) => {
+        try {
+          const dataUrl = await fileToResizedDataUrl(f, 1600);
+          return await (await fetch(dataUrl)).blob();
+        } catch {
+          return f;
+        }
+      }),
+    );
+
     const form = new FormData();
-    for (const f of files) form.append("image", f);
+    resized.forEach((blob, i) => {
+      // 파일명·mime 보존 — 서버의 ALLOWED_MIME 검사 통과용. 리사이즈된 blob 은 항상 JPEG.
+      const name = (files[i] as File).name || `toc-${i + 1}.jpg`;
+      const namedFile = new File(
+        [blob],
+        name.replace(/\.\w+$/, "") + ".jpg",
+        { type: "image/jpeg" },
+      );
+      form.append("image", namedFile);
+    });
 
     let lastError = "";
     for (let attempt = 0; attempt < 3; attempt++) {

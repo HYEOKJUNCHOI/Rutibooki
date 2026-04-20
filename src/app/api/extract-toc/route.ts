@@ -3,25 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 // T-37: Gemini Vision 으로 책 목차 이미지를 파트/섹션 JSON 으로 변환.
 // 프롬프트는 지시서 고정. 사용자 입력 없이 고정값 → 프롬프트 인젝션 위험 낮음.
 
-// 엄격한 스키마 강제 → Flash 가 내용 놓침. Pro 로 바꾸고 프롬프트도 풀어서
-// 모델이 자연스럽게 구조 뽑게 하고, 후처리로 우리 스키마에 맞춘다.
-const PROMPT = `이 이미지들은 한국어 책의 목차 페이지다.
-모든 파트/장/섹션 제목과 페이지 번호를 정확히 읽어서 JSON 으로 정리하라.
-- 상위 단위(부·파트·Part·나침반N·챕터N 등)는 parts[] 에,
-  그 아래 세부 항목(장·절·소제목)은 해당 파트의 sections[] 에 넣는다.
-- 상위 단위가 없으면 전체를 parts[0] 하나로 묶는다.
-- 각 항목의 시작 페이지는 startPage, endPage 는 다음 항목의 startPage - 1.
-  마지막 항목은 본인 startPage 와 같게 둬도 된다(서버가 보정).
-- 페이지 번호를 하나도 못 읽으면 confidence 를 0 으로.
-오직 JSON 만 응답. 설명·코드블록 금지.
-{
-  "parts": [
-    { "index": 1, "title": "...", "startPage": 1, "endPage": 52,
-      "sections": [{ "title": "...", "startPage": 1, "endPage": 28 }] }
-  ],
-  "totalPages": 312,
-  "confidence": 0.87
-}`;
+// 웹앱에서 "책 목차 json형식으로 정리해줘" 만으로 잘 나왔음 — 같은 톤 재현.
+// 스키마 강제·규칙 길게 넣으면 모델이 구조 맞추느라 텍스트를 놓침.
+// 후처리(postProcessParts)에서 우리 구조로 변환.
+const PROMPT = `책 목차 json형식으로 정리해줘`;
 
 // [Security HIGH #4] 파일 업로드 검증 — 크기·MIME·개수 제한으로 DoS/비용 공격 차단.
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -85,10 +70,8 @@ export async function POST(req: NextRequest) {
   };
 
   // 키는 쿼리스트링 대신 헤더로 — 서버 액세스로그/프록시 캐시에 키가 남지 않게.
-  // Pro 필수 — Flash 는 목차를 "본인이 자연스럽다 싶은 단어" 로 환각 보정.
-  // 실측: "별이 없는 밤, 부의 방향" → "빛이 없는 밤, 빛의 방향" 식으로 절반 오역.
-  // 비용 10배지만 한 권 3~5원 수준이라 감수할 만함.
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent`;
+  // Flash 로 웹앱 프롬프트 톤 그대로 테스트 — 짧은 프롬프트 + 자유 JSON.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
 
   let r: Response;
   try {
@@ -119,12 +102,140 @@ export async function POST(req: NextRequest) {
   const text =
     json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 
+  // 응답 원문을 항상 로그 — 짧은 프롬프트 실험 중 Gemini 가 내뱉는 구조 확인용.
+  console.log("[extract-toc] raw response:\n" + text);
+
+  // 짧은 프롬프트는 ```json 펜스로 감싸서 오기도 함 → 벗겨내기.
+  const stripped = text
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
   try {
-    const parsed = JSON.parse(text);
-    if ((parsed.confidence ?? 0) < 0.4) parsed.warning = "low-confidence";
-    return NextResponse.json(parsed);
-  } catch {
-    console.error("[extract-toc] parse fail", text);
+    const parsed = JSON.parse(stripped);
+    const normalized = normalizeTocResponse(parsed);
+    if ((normalized.confidence ?? 0) < 0.4) normalized.warning = "low-confidence";
+    return NextResponse.json(normalized);
+  } catch (e) {
+    console.error("[extract-toc] parse fail", e, stripped);
     return NextResponse.json({ error: "parse_failed" }, { status: 500 });
   }
+}
+
+// ── 어댑터 ──────────────────────────────────────────
+// Gemini 가 자유 프롬프트에 자주 내뱉는 웹앱 스타일 포맷
+//   { book_title, sections: [{ section_title, page } | { section_id, section_title, items: [...] }] }
+// 을 우리 포맷
+//   { parts: [{ index, title, startPage, endPage, sections: [{title, startPage, endPage}] }] }
+// 으로 변환.
+// 이미 우리 포맷이면 그대로 통과.
+
+interface RawSectionItem {
+  title?: string;
+  page?: number;
+}
+interface RawSection {
+  section_id?: string;
+  section_title?: string;
+  page?: number;
+  items?: RawSectionItem[];
+}
+interface RawResponse {
+  book_title?: string;
+  sections?: RawSection[];
+  parts?: unknown[];
+  totalPages?: number;
+  confidence?: number;
+}
+
+interface OurSection {
+  title: string;
+  startPage: number;
+  endPage: number;
+}
+interface OurPart {
+  index: number;
+  title: string;
+  startPage: number;
+  endPage: number;
+  sections: OurSection[];
+}
+interface OurResponse {
+  parts: OurPart[];
+  totalPages: number;
+  confidence?: number;
+  warning?: string;
+}
+
+function normalizeTocResponse(raw: RawResponse): OurResponse {
+  // 이미 우리 포맷이면 그대로 반환.
+  if (Array.isArray(raw.parts) && raw.parts.length > 0) {
+    return raw as unknown as OurResponse;
+  }
+
+  const webSections = Array.isArray(raw.sections) ? raw.sections : [];
+  if (webSections.length === 0) {
+    return { parts: [], totalPages: raw.totalPages ?? 0, confidence: 0 };
+  }
+
+  // 웹앱 포맷 → 우리 포맷.
+  // 규칙:
+  // - items 있으면 파트로 승격, items → sections.
+  // - items 없는 최상위(프롤로그·에필로그) 는 단독 파트로 (sections 1개).
+  const parts: OurPart[] = [];
+  for (const s of webSections) {
+    const rawTitle =
+      (s.section_id ? `${s.section_id}: ` : "") + (s.section_title ?? "");
+    const title = rawTitle.trim() || "무제";
+    if (Array.isArray(s.items) && s.items.length > 0) {
+      const sections: OurSection[] = s.items.map((it) => ({
+        title: it.title ?? "",
+        startPage: it.page ?? 0,
+        endPage: it.page ?? 0,
+      }));
+      parts.push({
+        index: parts.length + 1,
+        title,
+        startPage: sections[0].startPage,
+        endPage: sections[sections.length - 1].endPage,
+        sections,
+      });
+    } else if (typeof s.page === "number") {
+      parts.push({
+        index: parts.length + 1,
+        title,
+        startPage: s.page,
+        endPage: s.page,
+        sections: [{ title, startPage: s.page, endPage: s.page }],
+      });
+    }
+  }
+
+  // endPage 보정 — 각 섹션/파트의 endPage 를 다음 것의 startPage - 1 로.
+  const allSections: OurSection[] = [];
+  for (const p of parts) allSections.push(...p.sections);
+  for (let i = 0; i < allSections.length - 1; i++) {
+    const next = allSections[i + 1];
+    allSections[i].endPage = Math.max(
+      allSections[i].startPage,
+      next.startPage - 1,
+    );
+  }
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    const last = p.sections[p.sections.length - 1];
+    if (last) p.endPage = last.endPage;
+    p.endPage = Math.max(p.endPage, parts[i + 1].startPage - 1);
+  }
+  const lastPart = parts[parts.length - 1];
+  const totalPages =
+    raw.totalPages && raw.totalPages > 0
+      ? raw.totalPages
+      : lastPart?.endPage ?? 0;
+
+  return {
+    parts,
+    totalPages,
+    confidence: raw.confidence ?? 0.8,
+  };
 }

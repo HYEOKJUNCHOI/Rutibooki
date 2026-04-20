@@ -41,7 +41,18 @@ export function formatPartLabel(partIndex: number): string {
 }
 
 // 현재 페이지가 속한 파트를 반환. 범위 밖이면 마지막 파트로 폴백.
+// 책 전체가 파트 하나로 구성된 합성 파트 — 이전 저장 데이터 호환 + 목차 추출 실패 대비.
+// 호출자 대부분은 book.parts.length > 0 를 먼저 확인하지만 여기서도 안전망.
 export function getActivePart(book: Book, currentPage: number): BookPart {
+  if (!book.parts || book.parts.length === 0) {
+    return {
+      index: 1,
+      title: book.title,
+      startPage: 1,
+      endPage: Math.max(1, book.totalPages),
+      sections: [],
+    };
+  }
   const found = book.parts.find(
     (p) => currentPage >= p.startPage && currentPage <= p.endPage,
   );

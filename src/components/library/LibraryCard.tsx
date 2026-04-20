@@ -1,27 +1,104 @@
 "use client";
 
+import { useRef } from "react";
 import { Book } from "@/types/book";
 import { useBookState } from "@/store/selectors";
 import { calcProgress } from "@/utils/reading";
+
+// 길게누르기 임계값 — 500ms 는 OS 컨텍스트 메뉴와 충돌 가능해 조금 아래로.
+const LONG_PRESS_MS = 420;
+// 손 떨림 무시 — 이 픽셀 이상 이동하면 "탭/길게누르기 아님(스크롤)" 로 간주.
+const MOVE_TOLERANCE_PX = 8;
 
 interface LibraryCardProps {
   book: Book;
   cover?: string;
   onClick: () => void;
+  onLongPress?: (book: Book) => void;
 }
 
 // 서재 카드 — 작은 책 사이즈(약 64×86). 제목 띠지 + 진행률 뱃지.
 //
 // 뱃지:
 // - 상단 중앙(넘패드 8): "37%" 진행률 (진행 중일 때만)
-export default function LibraryCard({ book, cover, onClick }: LibraryCardProps) {
+export default function LibraryCard({
+  book,
+  cover,
+  onClick,
+  onLongPress,
+}: LibraryCardProps) {
   const state = useBookState(book.id);
   const currentPage = state?.currentPage ?? 0;
   const progress = calcProgress(currentPage, book.totalPages);
 
+  // 길게누르기 상태 — 타이머, 시작 좌표, 길게누르기 발생 플래그.
+  // 발생 플래그가 켜진 턴에는 onClick 을 삼킨다(누르고 뗀 순간 상세로 튀는 이슈 방지).
+  const pressTimerRef = useRef<number | null>(null);
+  const startXYRef = useRef<{ x: number; y: number } | null>(null);
+  const firedRef = useRef(false);
+
+  const clearTimer = () => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!onLongPress) return;
+    firedRef.current = false;
+    startXYRef.current = { x: e.clientX, y: e.clientY };
+    clearTimer();
+    pressTimerRef.current = window.setTimeout(() => {
+      firedRef.current = true;
+      // 햅틱 — 지원 브라우저만(모바일 Safari 제외).
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try {
+          navigator.vibrate(18);
+        } catch {
+          /* no-op */
+        }
+      }
+      onLongPress(book);
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!startXYRef.current) return;
+    const dx = e.clientX - startXYRef.current.x;
+    const dy = e.clientY - startXYRef.current.y;
+    if (Math.hypot(dx, dy) > MOVE_TOLERANCE_PX) clearTimer();
+  };
+
+  const handlePointerEnd = () => {
+    clearTimer();
+    startXYRef.current = null;
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (firedRef.current) {
+      // 길게누르기가 이미 발화 — 클릭 이벤트 무시.
+      e.preventDefault();
+      firedRef.current = false;
+      return;
+    }
+    onClick();
+  };
+
+  // iOS Safari 길게누르기 텍스트 선택·이미지 확대 방지.
+  const suppressContextMenu = (e: React.MouseEvent) => {
+    if (onLongPress) e.preventDefault();
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
+      onContextMenu={suppressContextMenu}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onPointerLeave={handlePointerEnd}
       aria-label={book.title}
       style={{
         position: "relative",

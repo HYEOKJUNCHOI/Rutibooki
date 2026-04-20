@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
@@ -9,6 +9,8 @@ import { useBookCovers } from "@/hooks/useBookCovers";
 import { useNickname } from "@/hooks/useNickname";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
+import BookActionSheet from "@/components/library/BookActionSheet";
+import { Book } from "@/types/book";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
@@ -24,7 +26,12 @@ export default function LibraryHome() {
   const hydrated = true;
 
   const registered = useBooksStore((s) => s.registered);
+  const removeBook = useBooksStore((s) => s.removeBook);
   const statesByBook = useReadingStore((s) => s.statesByBook);
+
+  // 길게눌러 뜨는 액션 시트 — 목업 책은 삭제/편집 불가(스토어에 없음).
+  const [sheetBook, setSheetBook] = useState<Book | null>(null);
+  const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
   // 사용자 등록 책 + 목업 병합. 동일 id 충돌 시 등록본 우선.
   const books = useMemo(() => {
@@ -147,6 +154,11 @@ export default function LibraryHome() {
                         book={book}
                         cover={coverById.get(book.id)}
                         onClick={() => router.push(`/book/${book.id}`)}
+                        onLongPress={
+                          isRegistered(book.id)
+                            ? (b) => setSheetBook(b)
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -188,6 +200,14 @@ export default function LibraryHome() {
           +
         </button>
       </PhoneFrame>
+
+      <BookActionSheet
+        book={sheetBook}
+        onClose={() => setSheetBook(null)}
+        onDelete={async (b) => {
+          await removeBook(b.id);
+        }}
+      />
     </main>
   );
 }

@@ -22,8 +22,9 @@ export default function LibraryHome() {
   const router = useRouter();
   const nickname = useNickname();
 
-  // AuthProvider 가 로그인 직후 pull 로 스토어를 채운다. 여기선 rehydrate 불필요.
-  const hydrated = true;
+  // AuthProvider 가 로그인 직후 pull 로 스토어를 채운다. pull 끝나기 전엔
+  // "서재 비어있어요" 오판이 한 프레임 떠서 플래시 — 실제 hydrated 로 바꿈.
+  const hydrated = useBooksStore((s) => s.hydrated);
 
   const registered = useBooksStore((s) => s.registered);
   const removeBook = useBooksStore((s) => s.removeBook);

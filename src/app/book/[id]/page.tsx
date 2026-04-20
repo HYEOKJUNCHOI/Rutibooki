@@ -29,8 +29,9 @@ export default function BookDetailPage({
   const dateStr = formatDateShort(today);
 
   const [showNudge, setShowNudge] = useState(false);
-  // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
-  const hydrated = true;
+  // Firestore pull 완료 전에 selectedBook 미검출로 "/" 로 튕기는 이슈 방지 —
+  // 스토어의 실제 hydrated 플래그가 true 가 된 뒤에만 리다이렉트 판정.
+  const hydrated = useBooksStore((s) => s.hydrated);
 
   const registered = useBooksStore((s) => s.registered);
   // 사용자 등록 책 우선, 없으면 목업에서 찾는다.

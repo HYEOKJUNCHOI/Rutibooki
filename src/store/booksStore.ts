@@ -10,6 +10,8 @@ import * as readingRepo from "@/lib/firestore/readingRepo";
 
 interface BooksStore {
   registered: Book[];
+  // Firestore pull 완료 여부 — 상세 페이지가 "없는 책" 리다이렉트 오판을 피하려면 이 플래그가 true 가 된 뒤에 판단해야 한다.
+  hydrated: boolean;
   hydrate: (books: Book[]) => void;
   addBook: (book: Book) => Promise<void>;
   updateBook: (id: string, patch: Partial<Book>) => Promise<void>;
@@ -28,15 +30,17 @@ function requireUid(): string {
 
 export const useBooksStore = create<BooksStore>()((set, get) => ({
   registered: [],
+  hydrated: false,
 
-  hydrate: (books) => set({ registered: books }),
+  hydrate: (books) => set({ registered: books, hydrated: true }),
 
   addBook: async (book) => {
     const uid = requireUid();
     // 로컬 optimistic 업데이트 — onSnapshot 도착 전 UI 반영.
+    // hydrated 도 켜둠 — 등록 직후 바로 상세로 들어가도 "없는 책" 리다이렉트 오판 방지.
     set((state) => {
       const without = state.registered.filter((b) => b.id !== book.id);
-      return { registered: [...without, book] };
+      return { registered: [...without, book], hydrated: true };
     });
     await booksRepo.addBook(uid, book);
   },
@@ -65,5 +69,5 @@ export const useBooksStore = create<BooksStore>()((set, get) => ({
 
   getById: (id) => get().registered.find((b) => b.id === id),
 
-  reset: () => set({ registered: [] }),
+  reset: () => set({ registered: [], hydrated: false }),
 }));

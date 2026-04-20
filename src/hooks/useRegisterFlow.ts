@@ -6,6 +6,7 @@ import type { AladinBook } from "@/types/aladin";
 import type { SlotStatus } from "@/components/register/RegisterSlot";
 import { postProcessParts } from "@/utils/postProcessParts";
 import { parseAladinToc } from "@/utils/parseAladinToc";
+import { normalizeAuthor } from "@/utils/normalizeAuthor";
 
 // T-35: /register 상태 머신. 표지/목차 업로드, Vision 호출, Naver 표지 검색.
 
@@ -142,6 +143,49 @@ export function useRegisterFlow() {
     [],
   );
 
+  // 바코드 스캔 직후 호출. ISBN 으로 알라딘 메타 동기 조회 → 폼 자동 채움.
+  // 여기선 "등록" 자체는 하지 않음. 사용자가 폼 확인하고 목차 사진 추가한 뒤 등록 버튼으로 마무리.
+  const lookupByIsbn = useCallback(async (isbn13: string) => {
+    setState((s) => ({
+      ...s,
+      isbn13,
+      isbnLookupLoading: true,
+    }));
+    try {
+      const r = await fetch(
+        `/api/fetch-toc?isbn=${encodeURIComponent(isbn13)}`,
+      );
+      if (!r.ok) throw new Error(`status ${r.status}`);
+      const data = await r.json();
+      if (data.error === "no_match" || !data.title) {
+        throw new Error(data.error || "no_match");
+      }
+      setState((s) => ({
+        ...s,
+        title: data.title,
+        author: normalizeAuthor(data.author || "") || s.author,
+        publisher: data.publisher || s.publisher,
+        // 바코드 경로에선 알라딘 커버를 미리보기 슬롯에 표시 (사용자 덮어쓰기 가능).
+        naverCoverUrl: data.cover || s.naverCoverUrl,
+        aladinMatch: {
+          isbn13,
+          title: data.title,
+          author: normalizeAuthor(data.author || ""),
+          publisher: data.publisher || "",
+          cover: data.cover || "",
+          itemPage: data.itemPage ?? 0,
+          link: "",
+        },
+        isbnLookupLoading: false,
+      }));
+      return true;
+    } catch (e) {
+      console.warn("[register-flow] lookupByIsbn fail", e);
+      setState((s) => ({ ...s, isbnLookupLoading: false }));
+      return false;
+    }
+  }, []);
+
   const overrideParts = useCallback((parts: BookPart[]) => {
     setState((s) => ({
       ...s,
@@ -160,33 +204,31 @@ export function useRegisterFlow() {
     }));
   }, []);
 
-  // Naver 표지 debounce 검색 — title 입력 후 500ms.
-  useEffect(() => {
-    const title = state.title.trim();
-    if (!title) {
-      setState((s) => ({ ...s, naverCoverUrl: null }));
-      return;
-    }
-    const id = window.setTimeout(async () => {
-      try {
-        const r = await fetch(
-          `/api/book-cover?title=${encodeURIComponent(title)}`,
-        );
-        if (!r.ok) return;
-        const data: NaverCover = await r.json();
-        setState((s) => ({
-          ...s,
-          // 사용자 업로드가 있으면 덮지 않음 (수동 우선)
-          naverCoverUrl: data.image ?? null,
-          // 저자가 비어있을 때만 자동 채움
-          author: s.author ? s.author : data.author || s.author,
-        }));
-      } catch {
-        // 네트워크 실패는 조용히 무시 (필수 플로우 아님)
-      }
-    }, 500);
-    return () => window.clearTimeout(id);
-  }, [state.title]);
+  // [DISABLED 2026-04-21] Naver 표지 debounce 검색은 일시 비활성화.
+  // 알라딘 메타(바코드 경로) + 표지 OCR→알라딘 보강(사진 경로) 둘 다 커버/메타를 잘 끌어오므로
+  // 중복 호출은 레이턴시/쿼터 낭비라 판단. 알라딘 쿼터(5,000/day) 초과 또는
+  // 커버 누락률 상승 시 아래 블록 주석 해제해서 복구:
+  //
+  // useEffect(() => {
+  //   const title = state.title.trim();
+  //   if (!title) {
+  //     setState((s) => ({ ...s, naverCoverUrl: null }));
+  //     return;
+  //   }
+  //   const id = window.setTimeout(async () => {
+  //     try {
+  //       const r = await fetch(`/api/book-cover?title=${encodeURIComponent(title)}`);
+  //       if (!r.ok) return;
+  //       const data: NaverCover = await r.json();
+  //       setState((s) => ({
+  //         ...s,
+  //         naverCoverUrl: data.image ?? null,
+  //         author: s.author ? s.author : data.author || s.author,
+  //       }));
+  //     } catch {}
+  //   }, 500);
+  //   return () => window.clearTimeout(id);
+  // }, [state.title]);
 
   // 목차 사진 Vision 추출. 3회 retry with backoff.
   // 반환값: 성공 시 TocResult, 실패 시 null.
@@ -385,6 +427,7 @@ export function useRegisterFlow() {
     extractCoverFromImage,
     overrideParts,
     overrideTotalPages,
+    lookupByIsbn,
   };
 }
 

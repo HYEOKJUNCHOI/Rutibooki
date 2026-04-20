@@ -11,7 +11,6 @@ import {
 } from "@/hooks/useRegisterFlow";
 import { useBooksStore } from "@/store/booksStore";
 import { startBackgroundRegistration } from "@/lib/registerBookInBackground";
-import { registerByIsbn } from "@/lib/registerByIsbn";
 import { Book } from "@/types/book";
 import {
   coverHintStyle,
@@ -61,28 +60,28 @@ export default function ReviewForm({ flow }: Props) {
     e.target.value = "";
   };
 
-  // "등록" 활성화 조건 — 표지 1장이면 충분. 나머지는 전부 백그라운드가 메움.
+  // "등록" 활성화 조건 — 표지 1장 OR ISBN(바코드로 메타 받아옴) 중 하나면 충분.
+  // 나머지는 전부 백그라운드가 메움. isbnLookupLoading 중엔 비활성.
   const canRegister = useMemo(() => {
-    return state.cover !== null && !registering;
-  }, [state.cover, registering]);
+    if (registering || state.isbnLookupLoading) return false;
+    return state.cover !== null || !!state.isbn13;
+  }, [state.cover, state.isbn13, state.isbnLookupLoading, registering]);
 
   const handleRegister = async () => {
     if (!canRegister) return;
     const coverFile = state.cover?.file;
-    if (!coverFile) return;
 
     setRegistering(true);
     try {
       const id = `book-${Date.now()}`;
       // shell — totalPages/parts 는 백그라운드가 채울 때까지 비어있음.
-      // title 수동 입력이 없으면 "분석 중…" 으로 표시하다 OCR 끝나면 덮어짐.
       // Firestore 는 undefined 값을 거부 — 없는 필드는 객체에서 아예 뺀다.
       const shell: Book = {
         id,
         title: state.title.trim() || "분석 중…",
         author: state.author.trim(),
-        searchQuery: `${state.title} ${state.author}`.trim(),
-        totalPages: 0,
+        searchQuery: state.isbn13 || `${state.title} ${state.author}`.trim(),
+        totalPages: state.aladinMatch?.itemPage ?? 0,
         parts: [],
         registeredAt: new Date().toISOString(),
         status: "extracting",
@@ -93,7 +92,6 @@ export default function ReviewForm({ flow }: Props) {
 
       await addBook(shell);
 
-      // TOC 슬롯에 사진이 있으면 같이 백그라운드로 넘겨준다(알라딘 실패 시 폴백용).
       const tocFiles: File[] = [];
       for (const k of TOC_SLOT_KEYS) {
         const s = state.tocSlots[k];
@@ -104,39 +102,23 @@ export default function ReviewForm({ flow }: Props) {
         shellId: id,
         coverFile,
         tocFiles,
+        isbn13: state.isbn13 ?? undefined,
       });
 
       router.replace("/");
     } finally {
-      // router.replace 가 즉시 언마운트시키지만 혹시 모를 실패 대비.
       setRegistering(false);
     }
   };
 
-  // 바코드 스캔 성공 → 알라딘 ISBN 룩업 한 방에 등록 완료.
-  // Gemini 0회, 평균 1~2초. 실패 시 아래 사진 경로가 그대로 대기 중이라 복귀 간단.
+  // 바코드 스캔 성공 → 알라딘 ISBN 룩업으로 폼 자동 채움 (메타 + 커버).
+  // 등록 버튼은 사용자가 목차 사진 추가 후 직접 탭.
   const handleBarcodeDetected = async (isbn13: string) => {
     setScanning(false);
-    setRegistering(true);
-    try {
-      const id = `book-${Date.now()}`;
-      const shell: Book = {
-        id,
-        title: "분석 중…",
-        author: "",
-        searchQuery: isbn13,
-        totalPages: 0,
-        parts: [],
-        registeredAt: new Date().toISOString(),
-        status: "extracting",
-        extractionStep: "알라딘 조회중",
-      };
-      await addBook(shell);
-      router.replace("/");
-      // fire-and-forget — 서재에서 진행바로 상태 피드백.
-      void registerByIsbn({ isbn13, shellId: id });
-    } finally {
-      setRegistering(false);
+    const ok = await flow.lookupByIsbn(isbn13);
+    if (!ok) {
+      // 알라딘 응답 없으면 ISBN 만 기록하고 사용자에게 수동 입력 맡김.
+      console.warn("[review-form] isbn lookup failed", isbn13);
     }
   };
 
@@ -149,10 +131,10 @@ export default function ReviewForm({ flow }: Props) {
         />
       )}
 
-      {/* 바코드 경로 — 표지 사진보다 정확하고 무료(Gemini 0회). 기본 CTA. */}
+      {/* 바코드 경로 — 스캔하면 알라딘 메타 자동 채움. 목차 사진은 선택적으로 추가. */}
       <button
         onClick={() => setScanning(true)}
-        disabled={registering}
+        disabled={registering || state.isbnLookupLoading}
         style={{
           padding: "14px 16px",
           background: "#00FF7A",
@@ -167,7 +149,11 @@ export default function ReviewForm({ flow }: Props) {
           fontFamily: "inherit",
         }}
       >
-        📷 바코드로 즉시 등록
+        {state.isbnLookupLoading
+          ? "📚 알라딘 조회 중…"
+          : state.isbn13
+            ? `✅ ISBN 매칭 완료 — 다시 스캔`
+            : "📷 바코드로 책 정보 자동 채우기"}
       </button>
       <div
         style={{
@@ -177,7 +163,9 @@ export default function ReviewForm({ flow }: Props) {
           marginTop: -12,
         }}
       >
-        책 뒷면 ISBN 바코드를 찍으면 1초 안에 끝납니다
+        {state.isbn13
+          ? "메타 받아왔습니다. 목차 사진 추가 후 등록하면 끝"
+          : "책 뒷면 ISBN 바코드를 스캔하면 제목/저자/표지 자동 입력"}
       </div>
 
       <section>

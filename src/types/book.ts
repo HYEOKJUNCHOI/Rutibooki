@@ -11,6 +11,8 @@ export interface BookSection {
 export interface BookPart {
   // Maryanne Wolf가 말한 "episodic boundary" — 파트 경계에서 인용 모달 트리거.
   index: number; // 1-based
+  // 책 고유 호칭(예: "나침반 1", "Chapter 3"). 없으면 "PART 01" 로 자동 생성.
+  label?: string;
   title: string;
   startPage: number;
   endPage: number;

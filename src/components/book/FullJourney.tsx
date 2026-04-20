@@ -550,22 +550,30 @@ function PartRow({
           paddingRight: 4,
         }}
       >
-        {/* 제목 분할 — 윗줄(태그) + 아랫줄(본문):
-            1순위 " — " (em dash, 목업 포맷)
-            2순위 ":" (Gemini 추출본 "나침반 1: 빛의 방향..." 대응)
-            분리자 없으면 전체를 본문으로. */}
+        {/* 3-슬롯: [좌측 작은 캡스] [중간 태그] [큰 본문]
+            - 책 고유 호칭(label)이 있으면 좌측에 그대로 — "나침반 1", "프롤로그" 등.
+              이 경우 중간 태그는 생략, 본문에는 part.title 전체.
+            - label 없으면 "PART 01" 폴백 + 기존 분리자(" — " | ":") 로 tag/body 분리. */}
         {(() => {
-          const emIdx = part.title.indexOf(" — ");
-          const colonIdx = part.title.indexOf(":");
-          let tag = part.title;
+          let indexLabel: string;
+          let tag = "";
           let bodyTitle = "";
-          if (emIdx >= 0) {
-            tag = part.title.slice(0, emIdx).trim();
-            bodyTitle = part.title.slice(emIdx + 3).trim();
-          } else if (colonIdx >= 0 && colonIdx < 20) {
-            // 콜론이 너무 뒤에 있으면 소제목에 포함된 ":" 일 가능성 → 제외.
-            tag = part.title.slice(0, colonIdx).trim();
-            bodyTitle = part.title.slice(colonIdx + 1).trim();
+          if (part.label) {
+            indexLabel = part.label;
+            bodyTitle = part.title;
+          } else {
+            indexLabel = `PART ${String(part.index).padStart(2, "0")}`;
+            const emIdx = part.title.indexOf(" — ");
+            const colonIdx = part.title.indexOf(":");
+            if (emIdx >= 0) {
+              tag = part.title.slice(0, emIdx).trim();
+              bodyTitle = part.title.slice(emIdx + 3).trim();
+            } else if (colonIdx >= 0 && colonIdx < 20) {
+              tag = part.title.slice(0, colonIdx).trim();
+              bodyTitle = part.title.slice(colonIdx + 1).trim();
+            } else {
+              tag = part.title;
+            }
           }
           const hasSplit = bodyTitle.length > 0;
           return (

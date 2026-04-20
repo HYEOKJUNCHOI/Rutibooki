@@ -4,15 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 // 왜 분리했냐: 이미지 토큰은 해상도 기반으로 비쌈. Cloud Vision 이 OCR 전담하고
 // 여기선 텍스트 토큰만 다루므로 입력 비용이 1/10 수준. 구조화 정확도는 Vision 한 방 대비 동등 이상.
 
-const PROMPT = `아래 텍스트는 책 목차 이미지를 OCR 한 결과입니다. 페이지 순서대로 모든 항목을 추출해 스키마에 맞춰 주세요.
-- parts: 최상위 단위(장/파트/챕터). 프롤로그·에필로그도 parts 로 취급.
-- part.label: 책이 실제로 쓰는 파트 호칭(예: "나침반 1", "Chapter 3", "PART II", "프롤로그"). 책에 호칭이 없으면 빈 문자열.
-- part.title: 파트의 내용 제목(label 을 제외한 본문). label 이 없는 파트는 제목 전체를 title 에 넣어주세요.
-- 각 part.sections: 하위 항목(절/섹션). 하위가 없으면 파트 자기 자신을 하나의 section 으로 넣어주세요.
-- startPage: 해당 항목이 시작하는 페이지 숫자. endPage 는 알면 적고 모르면 startPage 와 같게.
-- totalPages: 목차에서 마지막 항목의 페이지(또는 책 전체 페이지 수).
-- 원문 텍스트 그대로, 추측 금지, 누락 금지.
-- OCR 오타(예: 띄어쓰기 붙음, 유사문자 혼동)가 보이면 자연스럽게 교정하되 의미는 바꾸지 마세요.`;
+// 구조는 responseSchema 가 강제하므로 여기선 "행동 규칙"만. 필드 설명 중복 제거 = 입력 토큰 절약.
+const PROMPT = `책 목차 OCR 결과를 구조화.
+- 프롤로그·에필로그도 part.
+- label: 책이 쓰는 호칭("나침반 1","Chapter 3","프롤로그"). 없으면 "".
+- title: label 뺀 내용 제목. label 없으면 전체.
+- 하위 섹션 없으면 part 자신을 sections 한 개로.
+- endPage 모르면 startPage 와 동일.
+- 추측 금지, 누락 금지. OCR 오타만 자연스럽게 교정.`;
 
 const RESPONSE_SCHEMA = {
   type: "OBJECT",

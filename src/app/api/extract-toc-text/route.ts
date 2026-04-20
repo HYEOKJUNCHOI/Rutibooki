@@ -94,7 +94,9 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
+  // gemini-flash-latest 는 구글이 최신 Flash(3.x) 로 자동 승격 — 3 Flash 는 2.5 대비 토큰 단가 훨씬 비쌈.
+  // 목차 구조화는 2.5 로도 충분하므로 명시적으로 2.5 로 고정.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
 
   let r: Response;
   try {

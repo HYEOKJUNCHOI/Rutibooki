@@ -111,9 +111,8 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  // gemini-flash-latest alias — 구글이 최신 Flash(현재 2.5, 나오면 3.0+) 로 자동 연결.
-  // 2.5-flash 로 고정하면 향후 업그레이드 수동 반영 필요.
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
+  // gemini-flash-latest 가 3 Flash 로 승격되면서 단가 폭증 — 2.5 로 고정.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
 
   let r: Response;
   try {

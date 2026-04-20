@@ -99,8 +99,38 @@ export default function FullJourney({
         overflow: "hidden",
       }}
     >
-      {/* 여정 캔버스 — SVG 배경 + 절대 배치된 커버/노드/라벨.
-          진행률(%)은 종점(완독) 옆에 합류 — 상단 공간 낭비 방지. */}
+      {/* 진행률 — 카드 상단 우측. START 커버 옆 여백을 활용. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: 6,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 20,
+            fontWeight: 300,
+            color: "#E8E8E8",
+            letterSpacing: "-0.8px",
+            lineHeight: 1,
+          }}
+        >
+          {overall}
+          <span
+            style={{
+              fontSize: 10,
+              color: "#5A5A5A",
+              marginLeft: 2,
+              fontWeight: 500,
+            }}
+          >
+            %
+          </span>
+        </span>
+      </div>
+
+      {/* 여정 캔버스 — SVG 배경 + 절대 배치된 커버/노드/라벨 */}
       <div
         style={{
           position: "relative",
@@ -330,45 +360,14 @@ export default function FullJourney({
           style={{
             position: "absolute",
             left: `${(LABEL_X / SVG_W) * 100}%`,
-            top: goalY,
-            transform: "translateY(-50%)",
-            display: "flex",
-            alignItems: "baseline",
-            gap: 10,
+            top: goalY - 6,
+            fontSize: 10,
+            fontWeight: 700,
+            color: isFinished ? "#00FF7A" : "#7A7A7A",
+            letterSpacing: 2,
           }}
         >
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: isFinished ? "#00FF7A" : "#7A7A7A",
-              letterSpacing: 2,
-            }}
-          >
-            완독
-          </span>
-          {/* 진행률 — 상단 헤더 대신 종점에 합류. 여정의 "남은 거리" 맥락이 더 직관적. */}
-          <span
-            style={{
-              fontSize: 18,
-              fontWeight: 300,
-              color: "#E8E8E8",
-              letterSpacing: "-0.8px",
-              lineHeight: 1,
-            }}
-          >
-            {overall}
-            <span
-              style={{
-                fontSize: 9,
-                color: "#5A5A5A",
-                marginLeft: 1,
-                fontWeight: 500,
-              }}
-            >
-              %
-            </span>
-          </span>
+          완독
         </div>
       </div>
 

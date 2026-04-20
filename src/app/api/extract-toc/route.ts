@@ -134,11 +134,17 @@ interface RawSectionItem {
   title?: string;
   page?: number;
 }
+// Gemini 가 프롬프트에 따라 필드명을 바꿔버림 — 별칭 다 받기.
+//   (section_title | title) · (section_id | chapter) · (items | subsections | children)
 interface RawSection {
   section_id?: string;
+  chapter?: string;
   section_title?: string;
+  title?: string;
   page?: number;
   items?: RawSectionItem[];
+  subsections?: RawSectionItem[];
+  children?: RawSectionItem[];
 }
 interface RawResponse {
   book_title?: string;
@@ -184,11 +190,13 @@ function normalizeTocResponse(raw: RawResponse): OurResponse {
   // - items 없는 최상위(프롤로그·에필로그) 는 단독 파트로 (sections 1개).
   const parts: OurPart[] = [];
   for (const s of webSections) {
-    const rawTitle =
-      (s.section_id ? `${s.section_id}: ` : "") + (s.section_title ?? "");
+    const tag = s.section_id ?? s.chapter ?? "";
+    const name = s.section_title ?? s.title ?? "";
+    const rawTitle = (tag ? `${tag}: ` : "") + name;
     const title = rawTitle.trim() || "무제";
-    if (Array.isArray(s.items) && s.items.length > 0) {
-      const sections: OurSection[] = s.items.map((it) => ({
+    const items = s.items ?? s.subsections ?? s.children;
+    if (Array.isArray(items) && items.length > 0) {
+      const sections: OurSection[] = items.map((it) => ({
         title: it.title ?? "",
         startPage: it.page ?? 0,
         endPage: it.page ?? 0,

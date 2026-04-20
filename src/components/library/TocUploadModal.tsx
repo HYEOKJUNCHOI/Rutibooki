@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import RegisterSlot, { SlotStatus } from "@/components/register/RegisterSlot";
 import type { Book } from "@/types/book";
 
@@ -26,6 +26,16 @@ export default function TocUploadModal({ book, onClose, onConfirm }: Props) {
     2: null,
   });
   const [submitting, setSubmitting] = useState(false);
+  const bulkInputRef = useRef<HTMLInputElement | null>(null);
+
+  // iOS Safari 는 <input type="file" multiple accept="image/*"> 이 네이티브 사진보관함
+  // 멀티선택(번호 뱃지) 피커를 띄움 — 카톡과 동일한 UX. 슬롯별 단일 input 으론 한 장씩만 들어감.
+  const handleBulkPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []).slice(0, 3);
+    e.target.value = ""; // 같은 파일 다시 선택 가능하게.
+    if (picked.length === 0) return;
+    picked.forEach((file, i) => setSlot(i, file));
+  };
 
   const setSlot = (i: number, file: File) => {
     const previewUrl = URL.createObjectURL(file);
@@ -128,6 +138,36 @@ export default function TocUploadModal({ book, onClose, onConfirm }: Props) {
             사진은 최대 3장 — 목차가 이어지도록 순서대로.
           </div>
         </div>
+
+        {/* 한 번에 선택 — iOS 네이티브 사진보관함 멀티선택(번호 뱃지) 피커 호출. */}
+        <button
+          onClick={() => bulkInputRef.current?.click()}
+          disabled={submitting}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 10,
+            background: "#1A1A1A",
+            color: "#E8E8E8",
+            border: "1px solid #2A2A2A",
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: submitting ? "not-allowed" : "pointer",
+            letterSpacing: "-0.2px",
+            fontFamily: "inherit",
+          }}
+        >
+          📎 목차 사진 한 번에 선택 (최대 3장)
+        </button>
+        <input
+          ref={bulkInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleBulkPick}
+          style={{ display: "none" }}
+        />
 
         <div
           style={{

@@ -55,6 +55,11 @@ export interface RegisterFlowState {
   // 표지 OCR → 알라딘 검색에서 백그라운드로 매칭된 책. UI 노출 X.
   // 목차 후처리 시 totalPages 검산용으로 쓰임.
   aladinMatch: AladinBook | null;
+  // 바코드 경로로 확보된 ISBN-13 — 등록 시 백그라운드가 이걸 우선 사용.
+  // null 이면 표지 OCR → 제목 검색 경로로 회귀.
+  isbn13: string | null;
+  // 바코드 스캔 직후 알라딘 조회 중 상태 — 버튼 disable 용.
+  isbnLookupLoading: boolean;
 }
 
 export function useRegisterFlow() {
@@ -73,6 +78,8 @@ export function useRegisterFlow() {
     coverExtracting: false,
     coverExtractError: null,
     aladinMatch: null,
+    isbn13: null,
+    isbnLookupLoading: false,
   });
 
   // 언마운트 시 object URL 정리 — 누수 방지.

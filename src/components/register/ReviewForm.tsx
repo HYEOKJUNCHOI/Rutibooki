@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import RegisterSlot from "./RegisterSlot";
 import BarcodeScanner from "./BarcodeScanner";
@@ -47,6 +47,19 @@ export default function ReviewForm({ flow }: Props) {
   const addBook = useBooksStore((s) => s.addBook);
   const [registering, setRegistering] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
+
+  // 목차 여러 장 한 번에 선택 — 최대 슬롯 개수만큼 앞에서부터 채움.
+  // 기존 슬롯이 있으면 덮어씀 (대량 재선택 시 직관적).
+  const handleBulkTocPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    files.slice(0, TOC_SLOT_KEYS.length).forEach((file, i) => {
+      flow.setTocSlot(TOC_SLOT_KEYS[i] as TocSlotKey, file);
+    });
+    // 같은 파일 재선택 허용.
+    e.target.value = "";
+  };
 
   // "등록" 활성화 조건 — 표지 1장이면 충분. 나머지는 전부 백그라운드가 메움.
   const canRegister = useMemo(() => {
@@ -208,6 +221,36 @@ export default function ReviewForm({ flow }: Props) {
         <div style={sectionTitleStyle}>
           목차 사진
         </div>
+
+        <button
+          onClick={() => bulkInputRef.current?.click()}
+          disabled={registering}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: 10,
+            background: "#1A1A1A",
+            color: "#E8E8E8",
+            border: "1px solid #2A2A2A",
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            letterSpacing: "-0.2px",
+            fontFamily: "inherit",
+          }}
+        >
+          📎 목차 사진 한 번에 선택 (최대 {TOC_SLOT_KEYS.length}장)
+        </button>
+        <input
+          ref={bulkInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleBulkTocPick}
+          style={{ display: "none" }}
+        />
+
         <div style={slotGridStyle}>
           {TOC_SLOT_KEYS.map((k, i) => {
             const slot = state.tocSlots[k];

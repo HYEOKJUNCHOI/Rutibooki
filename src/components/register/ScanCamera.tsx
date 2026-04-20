@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// 신용카드 스캐너 방식 — 라이브 가장자리 감지 대신 고정 가이드 사각형을 보여주고,
-// 사용자가 그 안에 책 펼침 페이지를 맞추면 셔터.
-// 셔터 시점에 한 번만 jscanify 로 보정 시도 (실패 시 가이드 영역만 크롭).
+// 카드 스캐너 방식 + 수동 4점 보정 (CamScanner 정공법).
+// 1) 라이브: 고정 점선 가이드 표시
+// 2) 셔터: 프레임 정지 + 4코너 핸들 표시 (자동 검출 성공 시 그 좌표, 실패 시 가이드 모서리)
+// 3) 사용자가 코너 4개를 책 모서리에 드래그 → "보정" → perspective warp → 평면 출력
 
 interface Props {
   onCapture: (file: File) => void;
@@ -13,9 +14,20 @@ interface Props {
   shotTotal?: number;
 }
 
+interface Pt {
+  x: number;
+  y: number;
+}
+interface Corners {
+  tl: Pt;
+  tr: Pt;
+  br: Pt;
+  bl: Pt;
+}
+
 // 결과 이미지 longest edge (px). OCR 정확도/용량 절충.
 const OUTPUT_LONGEST_EDGE = 1600;
-// 가이드 사각형 — 화면 너비/높이 대비 비율. 책 펼침은 가로가 더 김 → 4:3 가로형.
+// 가이드 사각형 — 화면 너비/높이 대비 비율. 책 펼침은 가로가 더 김.
 const GUIDE_W_RATIO = 0.86;
 const GUIDE_H_RATIO = 0.55;
 
@@ -35,18 +47,28 @@ export default function ScanCamera({
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  // jscanify 인스턴스 — OpenCV 로드 후에만 생성.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scannerRef = useRef<any>(null);
 
+  const [stage, setStage] = useState<"live" | "preview">("live");
   const [status, setStatus] = useState<
     "requesting-camera" | "ready" | "capturing" | "error"
   >("requesting-camera");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // OpenCV/jscanify 로드 완료 여부. 카메라는 먼저 띄우고 cv 는 뒤에서 로드.
   const [cvReady, setCvReady] = useState(false);
 
-  // 1) 카메라 먼저 — UX 우선.
+  // 프리뷰 단계 데이터
+  const [previewCanvas, setPreviewCanvas] =
+    useState<HTMLCanvasElement | null>(null);
+  const [corners, setCorners] = useState<Corners | null>(null);
+  // SVG 화면 크기 — 코너 좌표를 화면 픽셀 ↔ 캔버스 픽셀 변환할 때 필요.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(
+    null,
+  );
+  const draggingRef = useRef<keyof Corners | null>(null);
+
+  // 1) 카메라 먼저.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -67,7 +89,7 @@ export default function ScanCamera({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2) OpenCV.js + jscanify 는 백그라운드 로드. 안 끝나도 셔터는 가능 (가이드 크롭 fallback).
+  // 2) OpenCV/jscanify 백그라운드 로드.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -81,7 +103,7 @@ export default function ScanCamera({
         if (cancelled) return;
         setCvReady(true);
       } catch {
-        // cv 로드 실패해도 가이드 크롭으로 동작은 함 — 조용히 넘어감.
+        // cv 실패해도 수동 보정은 동작 (가이드 모서리로 시작).
       }
     })();
     return () => {
@@ -106,52 +128,80 @@ export default function ScanCamera({
     streamRef.current = null;
   }
 
-  // 3) 셔터 — 가이드 영역만 크롭 (cv 가 있고 자동 감지가 그럴듯하면 perspective 보정).
-  const handleShutter = async () => {
+  // 3) 셔터 — 프레임 정지 + 코너 초기화.
+  const handleShutter = () => {
     const video = videoRef.current;
     if (!video) return;
     setStatus("capturing");
     try {
-      const captureCanvas = document.createElement("canvas");
-      captureCanvas.width = video.videoWidth;
-      captureCanvas.height = video.videoHeight;
-      const ctx = captureCanvas.getContext("2d");
+      const cap = document.createElement("canvas");
+      cap.width = video.videoWidth;
+      cap.height = video.videoHeight;
+      const ctx = cap.getContext("2d");
       if (!ctx) throw new Error("ctx_unavailable");
       ctx.drawImage(video, 0, 0);
 
-      // 가이드 사각형을 video 픽셀 좌표로 환산 — object-fit: cover 매핑은
-      // video 가 화면을 가득 채우니 가이드도 화면 기준 비율 그대로 video 좌표에 적용.
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const gw = vw * GUIDE_W_RATIO;
-      const gh = vh * GUIDE_H_RATIO;
-      const gx = (vw - gw) / 2;
-      const gy = (vh - gh) / 2;
+      // 자동 검출 시도 — 그럴듯한 4코너면 그 좌표, 아니면 가이드 직사각형.
+      const auto = cvReady
+        ? tryAutoCorners(scannerRef.current, cap)
+        : null;
+      const init = auto ?? guideCorners(cap.width, cap.height);
 
-      const aspect = gw / gh;
+      setPreviewCanvas(cap);
+      setCorners(init);
+      setStage("preview");
+      setStatus("ready");
+    } catch (e) {
+      setErrorMsg((e as Error).message || "capture_failed");
+      setStatus("error");
+    }
+  };
+
+  // 4) 보정 확정 — perspective warp → JPEG → onCapture.
+  const handleConfirm = async () => {
+    if (!previewCanvas || !corners) return;
+    setStatus("capturing");
+    try {
+      // 출력 비율은 사용자가 잡은 4코너의 평균 가로/세로 비율 따라감.
+      const wTop = dist(corners.tl, corners.tr);
+      const wBot = dist(corners.bl, corners.br);
+      const hLeft = dist(corners.tl, corners.bl);
+      const hRight = dist(corners.tr, corners.br);
+      const aspect = (wTop + wBot) / 2 / Math.max(1, (hLeft + hRight) / 2);
       const outW = OUTPUT_LONGEST_EDGE;
-      const outH = Math.round(outW / aspect);
+      const outH = Math.round(outW / Math.max(0.3, aspect));
 
       let outCanvas: HTMLCanvasElement | null = null;
-
-      // jscanify 로드되어 있으면 자동 감지 시도. 실패/이상하면 가이드 크롭 fallback.
       const scanner = scannerRef.current;
       if (scanner) {
-        outCanvas = tryAutoExtract(scanner, captureCanvas, outW, outH);
+        // jscanify extractPaper 는 cornerPoints 직접 전달 가능 — auto 검출 우회.
+        outCanvas = scanner.extractPaper(previewCanvas, outW, outH, {
+          topLeftCorner: corners.tl,
+          topRightCorner: corners.tr,
+          bottomLeftCorner: corners.bl,
+          bottomRightCorner: corners.br,
+        });
       }
 
+      // cv 없으면 단순 4점 둘러싼 bounding box 크롭으로 fallback.
       if (!outCanvas) {
-        // 가이드 영역 단순 크롭 + 스케일.
-        outCanvas = document.createElement("canvas");
-        outCanvas.width = outW;
-        outCanvas.height = outH;
-        const outCtx = outCanvas.getContext("2d");
-        if (!outCtx) throw new Error("out_ctx_unavailable");
-        outCtx.drawImage(
-          captureCanvas,
-          gx, gy, gw, gh,
-          0, 0, outW, outH,
+        const minX = Math.min(corners.tl.x, corners.bl.x);
+        const maxX = Math.max(corners.tr.x, corners.br.x);
+        const minY = Math.min(corners.tl.y, corners.tr.y);
+        const maxY = Math.max(corners.bl.y, corners.br.y);
+        const cropW = maxX - minX;
+        const cropH = maxY - minY;
+        const fallback = document.createElement("canvas");
+        fallback.width = outW;
+        fallback.height = Math.round((outW * cropH) / cropW);
+        const fc = fallback.getContext("2d");
+        if (!fc) throw new Error("out_ctx_unavailable");
+        fc.drawImage(
+          previewCanvas,
+          minX, minY, cropW, cropH,
+          0, 0, fallback.width, fallback.height,
         );
+        outCanvas = fallback;
       }
 
       const blob: Blob | null = await new Promise((resolve) =>
@@ -168,102 +218,332 @@ export default function ScanCamera({
     }
   };
 
+  // 5) 다시 찍기 — 라이브로 복귀.
+  const handleRetake = () => {
+    setPreviewCanvas(null);
+    setCorners(null);
+    setStage("live");
+  };
+
+  // 스테이지 크기 측정 — 코너 좌표 매핑용.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setStageSize({ w: r.width, h: r.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stage]);
+
+  // 코너 드래그 핸들러 — 캔버스 좌표계로 변환해서 저장.
+  const onPointerDown = (key: keyof Corners) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    draggingRef.current = key;
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!draggingRef.current || !previewCanvas || !stageSize) return;
+    const rect = stageRef.current!.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    // SVG 는 object-fit: contain 으로 캔버스 비율 유지 → 좌표 변환에 이미지 표시 영역 계산 필요.
+    const view = computeContainView(
+      previewCanvas.width,
+      previewCanvas.height,
+      stageSize.w,
+      stageSize.h,
+    );
+    const cx = ((sx - view.left) / view.width) * previewCanvas.width;
+    const cy = ((sy - view.top) / view.height) * previewCanvas.height;
+    const clamped: Pt = {
+      x: Math.max(0, Math.min(previewCanvas.width, cx)),
+      y: Math.max(0, Math.min(previewCanvas.height, cy)),
+    };
+    setCorners((prev) =>
+      prev ? { ...prev, [draggingRef.current!]: clamped } : prev,
+    );
+  };
+  const onPointerUp = () => {
+    draggingRef.current = null;
+  };
+
+  // ── 라이브 단계 ──
+  if (stage === "live") {
+    return (
+      <div style={fullscreenStyle}>
+        <video ref={videoRef} playsInline muted style={videoStyle} />
+
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          style={overlaySvgStyle}
+        >
+          <defs>
+            <mask id="cutout">
+              <rect width="100" height="100" fill="white" />
+              <rect
+                x={(100 - GUIDE_W_RATIO * 100) / 2}
+                y={(100 - GUIDE_H_RATIO * 100) / 2}
+                width={GUIDE_W_RATIO * 100}
+                height={GUIDE_H_RATIO * 100}
+                fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            width="100"
+            height="100"
+            fill="rgba(0,0,0,0.45)"
+            mask="url(#cutout)"
+          />
+          <rect
+            x={(100 - GUIDE_W_RATIO * 100) / 2}
+            y={(100 - GUIDE_H_RATIO * 100) / 2}
+            width={GUIDE_W_RATIO * 100}
+            height={GUIDE_H_RATIO * 100}
+            fill="none"
+            stroke="#00FF7A"
+            strokeWidth="0.4"
+            strokeDasharray="1.5 1"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+
+        <div style={topBarStyle}>
+          <button onClick={onCancel} style={closeBtnStyle} aria-label="닫기">
+            ×
+          </button>
+          <div style={topHintStyle}>
+            {status === "requesting-camera" && "카메라 권한 요청 중…"}
+            {status === "ready" && "📄 책 펼침을 점선 안에 맞춰 주세요"}
+            {status === "capturing" && "캡처 중…"}
+            {status === "error" && (errorMsg ?? "오류")}
+          </div>
+          {shotIndex && shotTotal && (
+            <div style={shotCounterStyle}>
+              {shotIndex} / {shotTotal}
+            </div>
+          )}
+        </div>
+
+        <div style={bottomBarStyle}>
+          <button
+            onClick={handleShutter}
+            disabled={status !== "ready"}
+            style={shutterBtnStyle(status === "ready")}
+            aria-label="촬영"
+          >
+            <span style={shutterInnerStyle} />
+          </button>
+          {!cvReady && status === "ready" && (
+            <div style={cvHintStyle}>고급 보정 준비 중 — 지금 찍어도 OK</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 프리뷰 단계 — 4점 보정 ──
+  const view =
+    previewCanvas && stageSize
+      ? computeContainView(
+          previewCanvas.width,
+          previewCanvas.height,
+          stageSize.w,
+          stageSize.h,
+        )
+      : null;
+  // 코너 → 화면 좌표.
+  const screenPt = (p: Pt) =>
+    view && previewCanvas
+      ? {
+          x: view.left + (p.x / previewCanvas.width) * view.width,
+          y: view.top + (p.y / previewCanvas.height) * view.height,
+        }
+      : { x: 0, y: 0 };
+
+  const sTl = corners ? screenPt(corners.tl) : null;
+  const sTr = corners ? screenPt(corners.tr) : null;
+  const sBr = corners ? screenPt(corners.br) : null;
+  const sBl = corners ? screenPt(corners.bl) : null;
+
   return (
-    <div style={fullscreenStyle}>
-      <video ref={videoRef} playsInline muted style={videoStyle} />
-
-      {/* 고정 가이드 — 화면 좌표계 기준. SVG viewBox = 100×100 으로 잡고 ratio 그대로. */}
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        style={overlaySvgStyle}
-      >
-        {/* 어두운 마스크 + 가운데만 비움 */}
-        <defs>
-          <mask id="cutout">
-            <rect width="100" height="100" fill="white" />
-            <rect
-              x={(100 - GUIDE_W_RATIO * 100) / 2}
-              y={(100 - GUIDE_H_RATIO * 100) / 2}
-              width={GUIDE_W_RATIO * 100}
-              height={GUIDE_H_RATIO * 100}
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          width="100"
-          height="100"
-          fill="rgba(0,0,0,0.45)"
-          mask="url(#cutout)"
+    <div
+      ref={stageRef}
+      style={fullscreenStyle}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      {previewCanvas && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewCanvas.toDataURL("image/jpeg", 0.85)}
+          alt="capture"
+          style={previewImgStyle}
+          draggable={false}
         />
-        {/* 가이드 테두리 — 점선 */}
-        <rect
-          x={(100 - GUIDE_W_RATIO * 100) / 2}
-          y={(100 - GUIDE_H_RATIO * 100) / 2}
-          width={GUIDE_W_RATIO * 100}
-          height={GUIDE_H_RATIO * 100}
-          fill="none"
-          stroke="#00FF7A"
-          strokeWidth="0.4"
-          strokeDasharray="1.5 1"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+      )}
 
-      {/* 상단 — 닫기 / 힌트 / 진행도 */}
+      {sTl && sTr && sBr && sBl && (
+        <svg style={overlaySvgStyle}>
+          <path
+            d={`M ${sTl.x} ${sTl.y} L ${sTr.x} ${sTr.y} L ${sBr.x} ${sBr.y} L ${sBl.x} ${sBl.y} Z`}
+            fill="rgba(0, 255, 122, 0.10)"
+            stroke="#00FF7A"
+            strokeWidth={2}
+          />
+        </svg>
+      )}
+
+      {sTl && (
+        <Handle pos={sTl} onPointerDown={onPointerDown("tl")} label="↖" />
+      )}
+      {sTr && (
+        <Handle pos={sTr} onPointerDown={onPointerDown("tr")} label="↗" />
+      )}
+      {sBr && (
+        <Handle pos={sBr} onPointerDown={onPointerDown("br")} label="↘" />
+      )}
+      {sBl && (
+        <Handle pos={sBl} onPointerDown={onPointerDown("bl")} label="↙" />
+      )}
+
       <div style={topBarStyle}>
-        <button onClick={onCancel} style={closeBtnStyle} aria-label="닫기">
-          ×
+        <button onClick={handleRetake} style={closeBtnStyle} aria-label="다시">
+          ←
         </button>
         <div style={topHintStyle}>
-          {status === "requesting-camera" && "카메라 권한 요청 중…"}
-          {status === "ready" && "📄 책 펼침을 점선 안에 맞춰 주세요"}
-          {status === "capturing" && "보정 중…"}
-          {status === "error" && (errorMsg ?? "오류")}
+          📐 4개 점을 책 모서리에 맞춰 주세요
         </div>
-        {shotIndex && shotTotal && (
-          <div style={shotCounterStyle}>
-            {shotIndex} / {shotTotal}
-          </div>
-        )}
       </div>
 
-      {/* 셔터 */}
-      <div style={bottomBarStyle}>
-        <button
-          onClick={handleShutter}
-          disabled={status !== "ready"}
-          style={shutterBtnStyle(status === "ready")}
-          aria-label="촬영"
-        >
-          <span style={shutterInnerStyle} />
+      <div style={previewBottomStyle}>
+        <button onClick={handleRetake} style={secondaryBtnStyle}>
+          다시 찍기
         </button>
-        {!cvReady && status === "ready" && (
-          <div style={cvHintStyle}>고급 보정 준비 중 — 지금 찍어도 OK</div>
-        )}
+        <button
+          onClick={handleConfirm}
+          disabled={status === "capturing"}
+          style={primaryBtnStyle(status !== "capturing")}
+        >
+          {status === "capturing" ? "보정 중…" : "보정하기"}
+        </button>
       </div>
     </div>
   );
 }
 
-// jscanify 자동 감지 시도. 그럴듯한 사각형이면 보정된 캔버스 반환, 아니면 null.
-function tryAutoExtract(
+// ── helpers ──
+
+function Handle({
+  pos,
+  onPointerDown,
+  label,
+}: {
+  pos: Pt;
+  onPointerDown: (e: React.PointerEvent) => void;
+  label: string;
+}) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      style={{
+        position: "absolute",
+        left: pos.x - 22,
+        top: pos.y - 22,
+        width: 44,
+        height: 44,
+        borderRadius: "50%",
+        background: "rgba(0, 255, 122, 0.25)",
+        border: "2px solid #00FF7A",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#00FF7A",
+        fontSize: 16,
+        fontWeight: 700,
+        cursor: "grab",
+        touchAction: "none",
+        userSelect: "none",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function dist(a: Pt, b: Pt): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function guideCorners(canvasW: number, canvasH: number): Corners {
+  const gw = canvasW * GUIDE_W_RATIO;
+  const gh = canvasH * GUIDE_H_RATIO;
+  const gx = (canvasW - gw) / 2;
+  const gy = (canvasH - gh) / 2;
+  return {
+    tl: { x: gx, y: gy },
+    tr: { x: gx + gw, y: gy },
+    br: { x: gx + gw, y: gy + gh },
+    bl: { x: gx, y: gy + gh },
+  };
+}
+
+// jscanify 자동 검출 시도 — 너무 작거나 마름모면 null 반환해서 가이드 모서리 쓰게.
+function tryAutoCorners(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scanner: any,
-  captureCanvas: HTMLCanvasElement,
-  outW: number,
-  outH: number,
-): HTMLCanvasElement | null {
+  cap: HTMLCanvasElement,
+): Corners | null {
   try {
-    const out = scanner.extractPaper(captureCanvas, outW, outH);
-    return out ?? null;
+    const contour = scanner.findPaperContour(cap);
+    if (!contour) return null;
+    const c = scanner.getCornerPoints(contour, cap);
+    if (!c?.topLeftCorner || !c?.topRightCorner || !c?.bottomLeftCorner || !c?.bottomRightCorner) {
+      return null;
+    }
+    const corners: Corners = {
+      tl: c.topLeftCorner,
+      tr: c.topRightCorner,
+      br: c.bottomRightCorner,
+      bl: c.bottomLeftCorner,
+    };
+    // 너무 작으면 (전체 면적의 10% 미만) — 노이즈로 보고 거부.
+    const w = (dist(corners.tl, corners.tr) + dist(corners.bl, corners.br)) / 2;
+    const h = (dist(corners.tl, corners.bl) + dist(corners.tr, corners.br)) / 2;
+    if (w * h < cap.width * cap.height * 0.1) return null;
+    return corners;
   } catch {
     return null;
   }
 }
 
-// OpenCV.js script 동적 로드. 한 번 로드되면 window.cv 가 onRuntimeInitialized 후 사용 가능.
+// object-fit: contain 으로 표시할 때 이미지가 차지하는 영역을 stage 안에서 계산.
+function computeContainView(
+  imgW: number,
+  imgH: number,
+  stageW: number,
+  stageH: number,
+): { left: number; top: number; width: number; height: number } {
+  const imgAspect = imgW / imgH;
+  const stageAspect = stageW / stageH;
+  if (imgAspect > stageAspect) {
+    const w = stageW;
+    const h = w / imgAspect;
+    return { left: 0, top: (stageH - h) / 2, width: w, height: h };
+  } else {
+    const h = stageH;
+    const w = h * imgAspect;
+    return { left: (stageW - w) / 2, top: 0, width: w, height: h };
+  }
+}
+
 function loadOpenCv(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (window.cv) {
@@ -301,15 +581,15 @@ function waitForRuntime(resolve: () => void, reject: (e: Error) => void) {
   cv.onRuntimeInitialized = () => resolve();
 }
 
+// ── styles ──
+
 const fullscreenStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "#000",
   zIndex: 10000,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
   overflow: "hidden",
+  touchAction: "none",
 };
 
 const videoStyle: React.CSSProperties = {
@@ -317,6 +597,16 @@ const videoStyle: React.CSSProperties = {
   height: "100%",
   objectFit: "cover",
   background: "#000",
+};
+
+const previewImgStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  objectFit: "contain",
+  background: "#000",
+  pointerEvents: "none",
 };
 
 const overlaySvgStyle: React.CSSProperties = {
@@ -347,7 +637,7 @@ const closeBtnStyle: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   color: "#FFF",
   border: "1px solid rgba(255,255,255,0.15)",
-  fontSize: 22,
+  fontSize: 20,
   lineHeight: 1,
   cursor: "pointer",
   fontFamily: "inherit",
@@ -408,3 +698,41 @@ const shutterInnerStyle: React.CSSProperties = {
   background: "transparent",
   border: "1px solid #000",
 };
+
+const previewBottomStyle: React.CSSProperties = {
+  position: "absolute",
+  bottom: 0,
+  left: 0,
+  right: 0,
+  padding: "20px 18px 28px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)",
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  flex: 1,
+  height: 50,
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.08)",
+  color: "#FFF",
+  border: "1px solid rgba(255,255,255,0.2)",
+  fontSize: 14,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const primaryBtnStyle = (enabled: boolean): React.CSSProperties => ({
+  flex: 2,
+  height: 50,
+  borderRadius: 12,
+  background: enabled ? "#00FF7A" : "#2A4A38",
+  color: enabled ? "#000" : "#5A5A5A",
+  border: "none",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: enabled ? "pointer" : "not-allowed",
+  fontFamily: "inherit",
+});

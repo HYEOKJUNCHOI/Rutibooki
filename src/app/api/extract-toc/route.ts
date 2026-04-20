@@ -3,10 +3,48 @@ import { NextRequest, NextResponse } from "next/server";
 // T-37: Gemini Vision 으로 책 목차 이미지를 파트/섹션 JSON 으로 변환.
 // 프롬프트는 지시서 고정. 사용자 입력 없이 고정값 → 프롬프트 인젝션 위험 낮음.
 
-// 웹앱에서 "책 목차 json형식으로 정리해줘" 만으로 잘 나왔음 — 같은 톤 재현.
-// 스키마 강제·규칙 길게 넣으면 모델이 구조 맞추느라 텍스트를 놓침.
-// 후처리(normalizeTocResponse)에서 우리 구조로 변환.
-const PROMPT = `책 목차 json형식으로 정리해줘`;
+// responseSchema 로 구조 고정 → 어댑터 복잡성 제거.
+// 프롬프트는 지침 최소 + 스키마가 구조를 강제.
+const PROMPT = `이 이미지들은 한 권의 책 목차입니다. 페이지 순서대로 모든 항목을 추출해 스키마에 맞춰 주세요.
+- parts: 최상위 단위(장/파트/챕터). 프롤로그·에필로그도 parts 로 취급.
+- 각 part.sections: 하위 항목(절/섹션). 하위가 없으면 파트 자기 자신을 하나의 section 으로 넣어주세요.
+- startPage: 해당 항목이 시작하는 페이지 숫자. endPage 는 알면 적고 모르면 startPage 와 같게.
+- totalPages: 목차에서 마지막 항목의 페이지(또는 책 전체 페이지 수).
+- 원문 텍스트 그대로, 추측 금지, 누락 금지.`;
+
+// Gemini structured output 스키마 — parts[] 만 받음. 래퍼/별칭 전부 차단.
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    parts: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          index: { type: "INTEGER" },
+          title: { type: "STRING" },
+          startPage: { type: "INTEGER" },
+          endPage: { type: "INTEGER" },
+          sections: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                title: { type: "STRING" },
+                startPage: { type: "INTEGER" },
+                endPage: { type: "INTEGER" },
+              },
+              required: ["title", "startPage", "endPage"],
+            },
+          },
+        },
+        required: ["index", "title", "startPage", "endPage", "sections"],
+      },
+    },
+    totalPages: { type: "INTEGER" },
+  },
+  required: ["parts", "totalPages"],
+};
 
 // [Security HIGH #4] 파일 업로드 검증 — 크기·MIME·개수 제한으로 DoS/비용 공격 차단.
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -65,6 +103,7 @@ export async function POST(req: NextRequest) {
     ],
     generationConfig: {
       responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
       temperature: 0.1,
     },
   };
@@ -112,61 +151,24 @@ export async function POST(req: NextRequest) {
     .trim();
 
   try {
-    const parsed = JSON.parse(stripped);
-    const normalized = normalizeTocResponse(parsed);
-    if ((normalized.confidence ?? 0) < 0.4) normalized.warning = "low-confidence";
-    return NextResponse.json(normalized);
+    const parsed = JSON.parse(stripped) as OurResponse;
+    // 스키마가 Gemini 단에서 구조 강제 — 여기는 최소 검증만.
+    if (!Array.isArray(parsed.parts) || parsed.parts.length === 0) {
+      console.error("[extract-toc] empty parts", stripped);
+      return NextResponse.json({ error: "empty_parts" }, { status: 422 });
+    }
+    // index 가 비어오면 채워줌(스키마상 required 지만 방어).
+    parsed.parts.forEach((p, i) => {
+      if (typeof p.index !== "number") p.index = i + 1;
+    });
+    return NextResponse.json(parsed);
   } catch (e) {
     console.error("[extract-toc] parse fail", e, stripped);
     return NextResponse.json({ error: "parse_failed" }, { status: 500 });
   }
 }
 
-// ── 어댑터 ──────────────────────────────────────────
-// Gemini 가 자유 프롬프트에 자주 내뱉는 웹앱 스타일 포맷
-//   { book_title, sections: [{ section_title, page } | { section_id, section_title, items: [...] }] }
-// 을 우리 포맷
-//   { parts: [{ index, title, startPage, endPage, sections: [{title, startPage, endPage}] }] }
-// 으로 변환.
-// 이미 우리 포맷이면 그대로 통과.
-
-interface RawSectionItem {
-  title?: string;
-  page?: number;
-}
-// Gemini 가 호출마다 필드명을 바꿔버림 — 별칭 다 받기.
-//   (section_title | title | chapter_title) · (section_id | chapter | chapter_number)
-//   (items | subsections | children | sections)
-interface RawSection {
-  section_id?: string;
-  chapter?: string;
-  chapter_number?: string;
-  section_title?: string;
-  title?: string;
-  chapter_title?: string;
-  page?: number;
-  items?: RawSectionItem[];
-  subsections?: RawSectionItem[];
-  children?: RawSectionItem[];
-  sections?: RawSectionItem[];
-}
-interface RawLeaf {
-  title?: string;
-  page?: number;
-}
-interface RawResponse {
-  book_title?: string;
-  sections?: RawSection[];
-  parts?: unknown[];
-  totalPages?: number;
-  confidence?: number;
-  // 래퍼 포맷들.
-  table_of_contents?: RawResponse;
-  chapters?: RawSection[];
-  prologue?: RawLeaf;
-  epilogue?: RawLeaf;
-}
-
+// Gemini responseSchema 로 강제한 출력 구조.
 interface OurSection {
   title: string;
   startPage: number;
@@ -182,91 +184,4 @@ interface OurPart {
 interface OurResponse {
   parts: OurPart[];
   totalPages: number;
-  confidence?: number;
-  warning?: string;
-}
-
-function normalizeTocResponse(raw: RawResponse): OurResponse {
-  // 이미 우리 포맷이면 그대로 반환.
-  if (Array.isArray(raw.parts) && raw.parts.length > 0) {
-    return raw as unknown as OurResponse;
-  }
-
-  // table_of_contents 래퍼 언랩.
-  if (raw.table_of_contents) raw = { ...raw.table_of_contents };
-
-  // chapters 배열을 sections 로, prologue/epilogue 를 앞/뒤에 부착.
-  const flat: RawSection[] = [];
-  if (raw.prologue) flat.push(raw.prologue as RawSection);
-  if (Array.isArray(raw.chapters)) flat.push(...raw.chapters);
-  if (Array.isArray(raw.sections)) flat.push(...raw.sections);
-  if (raw.epilogue) flat.push(raw.epilogue as RawSection);
-
-  const webSections = flat;
-  if (webSections.length === 0) {
-    return { parts: [], totalPages: raw.totalPages ?? 0, confidence: 0 };
-  }
-
-  // 웹앱 포맷 → 우리 포맷.
-  // 규칙:
-  // - items 있으면 파트로 승격, items → sections.
-  // - items 없는 최상위(프롤로그·에필로그) 는 단독 파트로 (sections 1개).
-  const parts: OurPart[] = [];
-  for (const s of webSections) {
-    const tag = s.section_id ?? s.chapter ?? s.chapter_number ?? "";
-    const name = s.section_title ?? s.chapter_title ?? s.title ?? "";
-    const rawTitle = (tag ? `${tag}: ` : "") + name;
-    const title = rawTitle.trim() || "무제";
-    const items = s.items ?? s.subsections ?? s.children ?? s.sections;
-    if (Array.isArray(items) && items.length > 0) {
-      const sections: OurSection[] = items.map((it) => ({
-        title: it.title ?? "",
-        startPage: it.page ?? 0,
-        endPage: it.page ?? 0,
-      }));
-      parts.push({
-        index: parts.length + 1,
-        title,
-        startPage: sections[0].startPage,
-        endPage: sections[sections.length - 1].endPage,
-        sections,
-      });
-    } else if (typeof s.page === "number") {
-      parts.push({
-        index: parts.length + 1,
-        title,
-        startPage: s.page,
-        endPage: s.page,
-        sections: [{ title, startPage: s.page, endPage: s.page }],
-      });
-    }
-  }
-
-  // endPage 보정 — 각 섹션/파트의 endPage 를 다음 것의 startPage - 1 로.
-  const allSections: OurSection[] = [];
-  for (const p of parts) allSections.push(...p.sections);
-  for (let i = 0; i < allSections.length - 1; i++) {
-    const next = allSections[i + 1];
-    allSections[i].endPage = Math.max(
-      allSections[i].startPage,
-      next.startPage - 1,
-    );
-  }
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    const last = p.sections[p.sections.length - 1];
-    if (last) p.endPage = last.endPage;
-    p.endPage = Math.max(p.endPage, parts[i + 1].startPage - 1);
-  }
-  const lastPart = parts[parts.length - 1];
-  const totalPages =
-    raw.totalPages && raw.totalPages > 0
-      ? raw.totalPages
-      : lastPart?.endPage ?? 0;
-
-  return {
-    parts,
-    totalPages,
-    confidence: raw.confidence ?? 0.8,
-  };
 }

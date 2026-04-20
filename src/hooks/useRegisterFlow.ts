@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookPart } from "@/types/book";
+import type { AladinBook } from "@/types/aladin";
 import type { SlotStatus } from "@/components/register/RegisterSlot";
+import { postProcessParts } from "@/utils/postProcessParts";
 
 // T-35: /register 상태 머신. 표지/목차 업로드, Vision 호출, Naver 표지 검색.
 
@@ -17,6 +19,8 @@ export interface TocResult {
   totalPages?: number;
   confidence?: number;
   warning?: string;
+  // 검색/바코드 경로로 온 경우 true — 페이지 범위가 Gemini 추정값임을 UI 에 전달.
+  estimated?: boolean;
 }
 
 interface NaverCover {
@@ -47,6 +51,9 @@ export interface RegisterFlowState {
   // 표지 메타 추출 진행 중인지 (Gemini Vision)
   coverExtracting: boolean;
   coverExtractError: string | null;
+  // 표지 OCR → 알라딘 검색에서 백그라운드로 매칭된 책. UI 노출 X.
+  // 목차 후처리 시 totalPages 검산용으로 쓰임.
+  aladinMatch: AladinBook | null;
 }
 
 export function useRegisterFlow() {
@@ -64,6 +71,7 @@ export function useRegisterFlow() {
     extracting: false,
     coverExtracting: false,
     coverExtractError: null,
+    aladinMatch: null,
   });
 
   // 언마운트 시 object URL 정리 — 누수 방지.
@@ -211,11 +219,19 @@ export function useRegisterFlow() {
           await wait(500 * (attempt + 1));
           continue;
         }
+        const rawParts = (data.parts ?? []) as BookPart[];
+        // 알라딘 totalPages 가 있으면 검산에 활용 — Gemini 가 추정한 totalPages 보다 신뢰도 ↑.
+        const aladinTotal = state.aladinMatch?.itemPage ?? 0;
+        const { parts: cleanedParts, warning: postWarning } = postProcessParts(
+          rawParts,
+          aladinTotal || data.totalPages,
+        );
         const result: TocResult = {
-          parts: (data.parts ?? []) as BookPart[],
-          totalPages: data.totalPages,
+          parts: cleanedParts,
+          // 알라딘 메타가 있으면 그쪽을 우선 사용 (출판사가 입력한 확정값).
+          totalPages: aladinTotal || data.totalPages,
           confidence: data.confidence,
-          warning: data.warning,
+          warning: postWarning ?? data.warning,
         };
         setState((s) => ({
           ...s,
@@ -237,7 +253,7 @@ export function useRegisterFlow() {
       tocSlots: markTocStatus(s.tocSlots, "error"),
     }));
     return null;
-  }, [state.tocSlots]);
+  }, [state.tocSlots, state.aladinMatch]);
 
   // 표지 이미지 → Gemini Vision → 제목/저자 자동 채움.
   // title 이 바뀌면 기존 effect 가 네이버 표지 자동 검색을 트리거한다.
@@ -303,6 +319,13 @@ export function useRegisterFlow() {
           genre: extractedGenre || s.genre,
           publisher: extractedPublisher || s.publisher,
         }));
+
+        // 4) 알라딘 백그라운드 보강 — 표지에서 제목을 못 뽑았으면 스킵.
+        // 메인 OCR 흐름은 이미 완료된 상태라 이건 "있으면 좋은" 보너스.
+        // 실패해도 사용자에겐 안 알린다 (사진 OCR 결과만으로도 등록 가능).
+        if (extractedTitle) {
+          enrichWithAladin(extractedTitle, setState);
+        }
       } catch (e) {
         setState((s) => ({
           ...s,
@@ -402,4 +425,33 @@ function markTocStatus(
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 표지 OCR 끝난 뒤 알라딘으로 메타 보강.
+// 1순위 매칭이면 제목/저자/출판사/표지를 알라딘 값으로 덮음 — Gemini OCR 의 오타 자동 교정.
+// 알라딘이 빈 응답을 주거나 네트워크 실패면 조용히 종료 (사진 OCR 결과 그대로 유지).
+async function enrichWithAladin(
+  query: string,
+  setState: React.Dispatch<React.SetStateAction<RegisterFlowState>>,
+) {
+  try {
+    const r = await fetch(`/api/search-book?q=${encodeURIComponent(query)}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const top: AladinBook | undefined = data.items?.[0];
+    if (!top) return;
+
+    setState((s) => ({
+      ...s,
+      // OCR 보다 알라딘이 정답에 가까움 — 사용자가 아직 손대지 않은 필드만 덮는다.
+      title: s.title === "" || s.title === query ? top.title : s.title,
+      author: s.author ? s.author : top.author,
+      publisher: s.publisher ? s.publisher : top.publisher,
+      // 사용자가 직접 표지를 올렸으면 안 덮음 (수동 우선). 알라딘 표지는 보조.
+      naverCoverUrl: s.cover ? s.naverCoverUrl : top.cover || s.naverCoverUrl,
+      aladinMatch: top,
+    }));
+  } catch {
+    // 네트워크 실패는 조용히 — 보강은 보너스, 필수 흐름이 아니다.
+  }
 }

@@ -347,6 +347,7 @@ export default function FullJourney({
               isCurrent={isCurrent}
               partProgress={partProgress}
               activeSectionKey={activeSectionKey}
+              activeSectionTitle={activeSection.title}
               currentPage={currentPage}
               nodeXPct={(partXs[idx] / SVG_W) * 100}
               nodeY={partYs[idx]}
@@ -422,6 +423,7 @@ interface PartRowProps {
   isCurrent: boolean;
   partProgress: number;
   activeSectionKey: string;
+  activeSectionTitle: string;
   currentPage: number;
   nodeXPct: number; // % of container width
   nodeY: number; // px in SVG coords
@@ -434,6 +436,7 @@ function PartRow({
   isCurrent,
   partProgress,
   activeSectionKey,
+  activeSectionTitle,
   currentPage,
   nodeXPct,
   nodeY,
@@ -451,18 +454,19 @@ function PartRow({
             transform: "translate(-50%, -50%)",
           }}
         >
-          <ProgressRingNode progress={partProgress} />
+          <ProgressRingNode progress={partProgress} page={currentPage} />
         </div>
       ) : (
         // 버스 정류장 — 원 + 은은한 외부 halo 링(도로 위에 "여기 멈춤" 느낌).
+        // 미래 정류장은 원 안에 진입 페이지(시작 페이지) 숫자 표시 — "이 파트부터 여기서 시작" 힌트.
         <div
           style={{
             position: "absolute",
             left: `${nodeXPct}%`,
             top: nodeY,
             transform: "translate(-50%, -50%)",
-            width: 18,
-            height: 18,
+            width: isPast ? 18 : 24,
+            height: isPast ? 18 : 24,
             borderRadius: "50%",
             background: isPast ? "#1F4D33" : "#0D0D0D",
             border: `2px solid ${isPast ? "#00B858" : "#3A3A3A"}`,
@@ -474,7 +478,7 @@ function PartRow({
             justifyContent: "center",
           }}
         >
-          {isPast && (
+          {isPast ? (
             <svg width="9" height="9" viewBox="0 0 8 8" aria-hidden>
               <path
                 d="M1.5 4.2 L3.3 6 L6.5 2.2"
@@ -485,6 +489,19 @@ function PartRow({
                 fill="none"
               />
             </svg>
+          ) : (
+            <span
+              style={{
+                fontSize: 8,
+                fontWeight: 700,
+                color: "#6A6A6A",
+                letterSpacing: "-0.3px",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {part.startPage}
+            </span>
           )}
         </div>
       )}
@@ -578,24 +595,37 @@ function PartRow({
                   {bodyTitle}
                 </div>
               )}
-              {/* 페이지 범위 — 각 정류장이 책의 어느 구간인지 즉각 파악.
-                  현재 파트만 살짝 강조, 나머지는 뮤트 톤. */}
-              <div
-                style={{
-                  fontSize: 9,
-                  fontWeight: 500,
-                  color: isCurrent
-                    ? "#7AB894"
-                    : isPast
-                      ? "#5A7A6A"
-                      : "#4A4A4A",
-                  letterSpacing: 0.3,
-                  marginTop: 3,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                p.{part.startPage}–{part.endPage}
-              </div>
+              {/* 현재 파트: 지금 읽고 있는 소제목 한 줄 (페이지 범위보다 "어디 읽는 중" 이 더 유용).
+                  지난 파트: 페이지 범위 유지. 미래 파트: 정류장 원에 시작 페이지가 박혀있어 생략. */}
+              {isCurrent ? (
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 500,
+                    color: "#7AB894",
+                    letterSpacing: 0.3,
+                    marginTop: 3,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {activeSectionTitle}
+                </div>
+              ) : isPast ? (
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 500,
+                    color: "#5A7A6A",
+                    letterSpacing: 0.3,
+                    marginTop: 3,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  p.{part.startPage}–{part.endPage}
+                </div>
+              ) : null}
             </div>
           );
         })()}
@@ -668,7 +698,13 @@ function PartRow({
 // ─────────────────────────────────────────────────────────
 // 프로그레스 링 노드 — 현재 파트 전용. stroke-dashoffset 로 진행률.
 // ─────────────────────────────────────────────────────────
-function ProgressRingNode({ progress }: { progress: number }) {
+function ProgressRingNode({
+  progress,
+  page,
+}: {
+  progress: number;
+  page: number;
+}) {
   const size = 24;
   const stroke = 2.2;
   const radius = (size - stroke) / 2;
@@ -717,6 +753,7 @@ function ProgressRingNode({ progress }: { progress: number }) {
           style={{ transition: "stroke-dashoffset 600ms ease" }}
         />
       </svg>
+      {/* 링 안 숫자 = 현재 페이지. 파트 내부 진행도(%)는 stroke 의 채움 길이로 시각화. */}
       <span
         style={{
           fontSize: 8,
@@ -725,9 +762,10 @@ function ProgressRingNode({ progress }: { progress: number }) {
           letterSpacing: "-0.3px",
           position: "relative",
           lineHeight: 1,
+          fontVariantNumeric: "tabular-nums",
         }}
       >
-        {progress}
+        {page}
       </span>
     </div>
   );

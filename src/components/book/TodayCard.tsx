@@ -1,13 +1,7 @@
 "use client";
 
 import { Book } from "@/types/book";
-import {
-  calcProgress,
-  formatPageRange,
-  formatPartLabel,
-  getActivePart,
-  getActiveSection,
-} from "@/utils/reading";
+import { calcProgress } from "@/utils/reading";
 import { useBookState } from "@/store/selectors";
 
 interface TodayCardProps {
@@ -19,10 +13,6 @@ interface TodayCardProps {
 export default function TodayCard({ book }: TodayCardProps) {
   const state = useBookState(book.id);
   const currentPage = state?.currentPage ?? 0;
-
-  // 오늘 읽을 활성 섹션 = 현재 페이지가 속한 섹션. 미시작(0p)이면 첫 섹션.
-  const section = getActiveSection(book, currentPage || 1);
-  const part = getActivePart(book, currentPage || 1);
 
   const progress = calcProgress(currentPage, book.totalPages);
   const remaining = book.totalPages - currentPage;
@@ -37,23 +27,8 @@ export default function TodayCard({ book }: TodayCardProps) {
         marginBottom: 16,
       }}
     >
-      {/* 파트 · 페이지 범위 라벨 — "오늘"이라는 단어는 쓰지 않는다. 분량 제시일 뿐 목표 아님. */}
-      <p
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: "#E8E8E8",
-          marginBottom: 14,
-          letterSpacing: "-0.3px",
-        }}
-      >
-        {formatPartLabel(part.index)}
-        <span style={{ margin: "0 8px", color: "#4A4A4A" }}>·</span>
-        <span style={{ color: "#8A8A8A", fontWeight: 500 }}>
-          {formatPageRange(section.startPage, section.endPage)}
-        </span>
-      </p>
-      {/* 진행 바 — 책 전체 대비 현재 페이지. 단일 의미. */}
+      {/* 진행 바 — 책 전체 대비 현재 페이지. 단일 의미.
+          파트/섹션 라벨은 FullJourney 에 이미 명시적으로 드러나 TodayCard 에서는 중복 제거. */}
       <div style={{ position: "relative", marginBottom: 8 }}>
         <div
           style={{

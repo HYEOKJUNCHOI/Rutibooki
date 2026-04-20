@@ -6,8 +6,10 @@ import { BookPart } from "@/types/book";
 // totalPagesHint: 알라딘 메타에서 가져온 책 전체 쪽수. 마지막 파트 endPage 와 비교해
 // 너무 어긋나면 warning 만 띄우고 데이터는 건드리지 않는다.
 
+// 본문이 끝난 뒤의 "꼬리" 페이지들 — 실제로 읽지 않으므로 진행률 계산에서 제외.
+// 참고자료/참고문헌/미주/후주도 포함 (사용자 요청).
 const APPENDIX_RE =
-  /부록|색인|찾아보기|판권|저자\s*소개|역자\s*후기|참고\s*문헌|감사의\s*말/;
+  /부록|색인|찾아보기|판권|저자\s*소개|역자\s*후기|참고\s*문헌|참고\s*자료|미주|후주|주석|감사의\s*말/;
 
 export function postProcessParts(
   parts: BookPart[],

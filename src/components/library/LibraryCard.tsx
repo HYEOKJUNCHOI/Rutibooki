@@ -7,8 +7,9 @@ import { calcProgress } from "@/utils/reading";
 import { splitTitle } from "@/utils/title";
 
 // 추출 예상 시간(ms) — 이 시간 동안 0→90% 로 스멀스멀 올라감. 실제 완료 시 100% 스냅.
-// 표지→검색→목차 합쳐 22~28초. 22초를 타겟으로 잡아 진행바가 90% 에 오래 멈추는 현상 완화.
-const EXTRACTION_ETA_MS = 22000;
+// 실측: 표지→검색→Gemini 멀티모달 목차 추출 합쳐 45~50초 (이미지 3장 기준).
+// 이전 22초는 너무 빨라 90% 에서 20~25초 멈춰 있어서 "멈춘 듯" 보였음.
+const EXTRACTION_ETA_MS = 48000;
 
 // 길게누르기 임계값 — 500ms 는 OS 컨텍스트 메뉴와 충돌 가능해 조금 아래로.
 const LONG_PRESS_MS = 420;

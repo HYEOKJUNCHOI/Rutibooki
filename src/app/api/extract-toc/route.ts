@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // 웹앱에서 "책 목차 json형식으로 정리해줘" 만으로 잘 나왔음 — 같은 톤 재현.
 // 스키마 강제·규칙 길게 넣으면 모델이 구조 맞추느라 텍스트를 놓침.
-// 후처리(postProcessParts)에서 우리 구조로 변환.
+// 후처리(normalizeTocResponse)에서 우리 구조로 변환.
 const PROMPT = `책 목차 json형식으로 정리해줘`;
 
 // [Security HIGH #4] 파일 업로드 검증 — 크기·MIME·개수 제한으로 DoS/비용 공격 차단.
@@ -69,9 +69,9 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  // 키는 쿼리스트링 대신 헤더로 — 서버 액세스로그/프록시 캐시에 키가 남지 않게.
-  // Flash 로 웹앱 프롬프트 톤 그대로 테스트 — 짧은 프롬프트 + 자유 JSON.
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+  // gemini-flash-latest alias — 구글이 최신 Flash(현재 2.5, 나오면 3.0+) 로 자동 연결.
+  // 2.5-flash 로 고정하면 향후 업그레이드 수동 반영 필요.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
 
   let r: Response;
   try {
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
   const json = await r.json();
   // Gemini 응답에서 텍스트 파트 추출. 응답 스키마 보장 없음 → 방어적 접근.
-  const text =
+  const text: string =
     json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 
   // 응답 원문을 항상 로그 — 짧은 프롬프트 실험 중 Gemini 가 내뱉는 구조 확인용.

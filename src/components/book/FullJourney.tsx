@@ -475,39 +475,87 @@ function PartRow({
           paddingRight: 4,
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span
-            style={{
-              fontSize: 8,
-              fontWeight: 700,
-              color: isCurrent ? "#00FF7A" : isPast ? "#00B858" : "#4A4A4A",
-              letterSpacing: 1.5,
-              flexShrink: 0,
-            }}
-          >
-            PART {String(part.index).padStart(2, "0")}
-          </span>
-          <span
-            style={{
-              fontSize: isCurrent ? 12 : 11,
-              fontWeight: isCurrent ? 700 : 500,
-              color: isCurrent ? "#E8E8E8" : isPast ? "#9A9A9A" : "#5A5A5A",
-              letterSpacing: "-0.3px",
-              // 긴 제목은 2줄까지 줄바꿈 — 잘리는 대신 읽히도록.
-              whiteSpace: "normal",
-              lineHeight: 1.3,
-              wordBreak: "keep-all",
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              flex: 1,
-              minWidth: 0,
-            }}
-          >
-            {part.title}
-          </span>
-        </div>
+        {/* 제목은 " — " (em dash) 기준으로 분할:
+            윗줄 = 태그(LEVEL 0 · 생존), 아랫줄 = 본문 타이틀(고장 난 엔진을 다시 켜는 법).
+            태그가 없으면 전체를 본문으로 간주. */}
+        {(() => {
+          const [tag, ...rest] = part.title.split(" — ");
+          const bodyTitle = rest.join(" — ").trim();
+          const hasSplit = bodyTitle.length > 0;
+          return (
+            <div>
+              {/* 윗줄 — PART 인덱스 + 태그(subtitle) */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 8,
+                  marginBottom: hasSplit ? 3 : 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 700,
+                    color: isCurrent
+                      ? "#00FF7A"
+                      : isPast
+                        ? "#00B858"
+                        : "#4A4A4A",
+                    letterSpacing: 1.5,
+                    flexShrink: 0,
+                  }}
+                >
+                  PART {String(part.index).padStart(2, "0")}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: isCurrent
+                      ? "#9AE0B9"
+                      : isPast
+                        ? "#7A9A8A"
+                        : "#5A5A5A",
+                    letterSpacing: "-0.2px",
+                    lineHeight: 1.25,
+                    // 태그가 길 수 있으나 1줄 유지 — 긴 본문은 아래줄로 내려감.
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {tag}
+                </span>
+              </div>
+              {/* 아랫줄 — 본문 타이틀(대시 뒤). 시각적 강조 포인트. */}
+              {hasSplit && (
+                <div
+                  style={{
+                    fontSize: isCurrent ? 13 : 12,
+                    fontWeight: isCurrent ? 700 : 600,
+                    color: isCurrent
+                      ? "#E8E8E8"
+                      : isPast
+                        ? "#9A9A9A"
+                        : "#6A6A6A",
+                    letterSpacing: "-0.3px",
+                    lineHeight: 1.3,
+                    wordBreak: "keep-all",
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {bodyTitle}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 현재 파트만 섹션 스트립 */}
         {isCurrent && part.sections.length > 0 && (

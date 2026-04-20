@@ -52,8 +52,13 @@ export function getActivePart(book: Book, currentPage: number): BookPart {
 }
 
 // 현재 페이지가 속한 섹션을 반환. pre-fill 기본값 계산에 씀.
+// sections 가 비어있는(Gemini 가 파트만 뽑아준) 케이스는 파트 범위를 그대로 섹션으로 합성 —
+// postProcessParts 에서도 보정하지만 외부 데이터/목업 경로까지 안전하게.
 export function getActiveSection(book: Book, currentPage: number): BookSection {
   const part = getActivePart(book, currentPage);
+  if (!part.sections || part.sections.length === 0) {
+    return { title: part.title, startPage: part.startPage, endPage: part.endPage };
+  }
   const found = part.sections.find(
     (s) => currentPage >= s.startPage && currentPage <= s.endPage,
   );
@@ -83,7 +88,11 @@ export function calcDailyRange(
 ): { start: number; end: number } {
   // 아직 첫 페이지 진입 전(currentPage === 0) — 첫 섹션을 오늘치로.
   if (currentPage <= 0) {
-    const first = book.parts[0].sections[0];
+    const firstPart = book.parts[0];
+    const first = firstPart.sections?.[0] ?? {
+      startPage: firstPart.startPage,
+      endPage: firstPart.endPage,
+    };
     return { start: first.startPage, end: first.endPage };
   }
   const section = getActiveSection(book, currentPage);

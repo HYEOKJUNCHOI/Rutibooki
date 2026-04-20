@@ -41,8 +41,17 @@ export function postProcessParts(
     }
   }
 
-  // 5) index 재부여 (필터·정렬로 어긋났을 수 있음)
-  cleaned = cleaned.map((p, idx) => ({ ...p, index: idx + 1 }));
+  // 5) index 재부여 + sections 보정.
+  // Gemini 가 sections 를 아예 빼먹거나 빈 배열로 주는 경우가 있음 → 파트 전체를
+  // 단일 섹션으로 합성. 이거 없으면 reading.ts 의 sections[0] 접근이 터진다.
+  cleaned = cleaned.map((p, idx) => ({
+    ...p,
+    index: idx + 1,
+    sections:
+      p.sections && p.sections.length > 0
+        ? p.sections
+        : [{ title: p.title, startPage: p.startPage, endPage: p.endPage }],
+  }));
 
   // 6) 알라딘 totalPages 와 마지막 endPage 비교 — 30쪽 넘게 차이나면 경고
   let warning: string | undefined;

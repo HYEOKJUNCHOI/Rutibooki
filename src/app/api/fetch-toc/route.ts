@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
     `&ItemId=${encodeURIComponent(isbn)}` +
     `&output=js` +
     `&Version=20131101` +
-    // Toc: 목차 HTML, Packing: itemPage(총쪽수)
-    `&OptResult=Toc,packing`;
+    // Toc: 목차 HTML, Packing: itemPage(총쪽수). 둘 다 대문자 시작 — 알라딘 문서 표기 기준.
+    // 이전 "packing" 소문자 버전은 itemPage 가 종종 0 으로 리턴되던 원인.
+    `&OptResult=Toc,Packing`;
 
   let r: Response;
   try {

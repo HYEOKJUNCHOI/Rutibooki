@@ -54,13 +54,28 @@ export async function registerByIsbn({ isbn13, shellId }: StartArgs): Promise<{
     return { ok: false, reason: "no_match" };
   }
 
-  // 1) 목차 HTML 파싱 → parts
+  // 1) 메타 먼저 반영 — 목차 단계 실패해도 최소 제목·표지는 카드에 보이게.
+  const metaPatch: Partial<Book> = { title: data.title };
+  if (data.author) metaPatch.author = data.author;
+  if (data.publisher) metaPatch.publisher = data.publisher;
+  if (data.cover) metaPatch.coverUrl = data.cover;
+  await updateBook(shellId, metaPatch);
+
+  // 2) 목차 HTML 파싱.
   const parsed = parseAladinToc(data.toc ?? "");
   let parts: BookPart[] = parsed.parts;
   const itemPage = data.itemPage ?? 0;
   const totalPages = itemPage > 0 ? itemPage : parsed.lastPage;
 
-  // 2) 목차 비어있으면 단일 파트 폴백 — itemPage 만으로 최소 사용 가능.
+  console.log("[isbn-register] toc parse", {
+    hasToc: (data.toc ?? "").length > 0,
+    partsCount: parts.length,
+    itemPage,
+    parsedLastPage: parsed.lastPage,
+    totalPages,
+  });
+
+  // 3) 목차 비었지만 itemPage 는 있음 → 단일 파트 폴백.
   if (parts.length === 0 && totalPages > 0) {
     parts = [
       {
@@ -74,20 +89,12 @@ export async function registerByIsbn({ isbn13, shellId }: StartArgs): Promise<{
   }
 
   if (parts.length === 0 || totalPages === 0) {
+    // 메타는 남아있고 status=failed 로 표시 → 서재에서 "사진으로 목차 보강" 유도 가능.
     await updateBook(shellId, { status: "failed" });
     return { ok: false, reason: "empty_parts_and_no_pages" };
   }
 
-  const patch: Partial<Book> = {
-    title: data.title,
-    parts,
-    totalPages,
-  };
-  if (data.author) patch.author = data.author;
-  if (data.publisher) patch.publisher = data.publisher;
-  if (data.cover) patch.coverUrl = data.cover;
-
-  await updateBook(shellId, patch);
+  await updateBook(shellId, { parts, totalPages });
   await clearStatusField(shellId);
 
   return { ok: true };

@@ -247,8 +247,10 @@ async function callExtractToc(
   const resized: Blob[] = await Promise.all(
     files.map(async (f) => {
       try {
-        // 2400px — 작은 글자/점선/페이지 숫자 인식률 확보. 1600 은 뭉개짐.
-        const dataUrl = await fileToResizedDataUrl(f, 2400);
+        // 1800px — Vercel 서버리스 요청 바디 4.5MB 제한 회피.
+        // 2400 3장 = 바디 초과로 edge 에서 413 차단(함수 로그 안 남음).
+        // Flash OCR 품질은 1800 에서도 거의 유지.
+        const dataUrl = await fileToResizedDataUrl(f, 1800);
         return await (await fetch(dataUrl)).blob();
       } catch {
         return f;

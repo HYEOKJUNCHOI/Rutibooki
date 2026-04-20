@@ -289,9 +289,6 @@ export default function ReviewForm({ flow }: Props) {
                 onClear={
                   slot ? () => clearTocSlot(k as TocSlotKey) : undefined
                 }
-                allowScan
-                scanShotIndex={i + 1}
-                scanShotTotal={TOC_SLOT_KEYS.length}
               />
             );
           })}

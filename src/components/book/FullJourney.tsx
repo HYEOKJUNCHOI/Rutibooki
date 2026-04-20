@@ -51,13 +51,15 @@ export default function FullJourney({
   const activeSectionKey = `${activeSection.startPage}-${activeSection.endPage}`;
   const isFinished = overall >= 100;
 
-  // 각 파트 노드의 y — 커버→PART1 간격(STEP_Y)을 기준으로 모든 정류장 균등 간격.
-  // 현재 파트의 섹션 스트립은 라벨 블록 안에서 자연스럽게 흘러내림(행 높이를 별도로 먹지 않음).
+  // 각 파트 노드의 y — 커버→PART1 은 짧게(STEP_Y/2), 이후 정류장은 STEP_Y 균등.
+  // 시작점이 너무 멀어보여 답답한 인상을 주던 문제를 절반으로 좁혀 해결.
   const partYs: number[] = [];
+  const FIRST_STEP_Y = STEP_Y / 2;
   for (let i = 0; i < book.parts.length; i++) {
-    partYs.push(COVER_BOTTOM_Y + STEP_Y + i * STEP_Y);
+    partYs.push(COVER_BOTTOM_Y + FIRST_STEP_Y + i * STEP_Y);
   }
-  const goalY = partYs[partYs.length - 1] + STEP_Y;
+  // 마지막 PART → 완독도 절반 간격 — 시작/끝의 "여유" 를 대칭으로 정돈.
+  const goalY = partYs[partYs.length - 1] + FIRST_STEP_Y;
   // 현재 파트의 섹션 스트립이 라벨 블록 아래로 내려오므로 svgHeight 는 여유를 둠.
   const svgHeight = goalY + (currentPartIdx >= 0 ? 24 : 12);
 
@@ -576,6 +578,24 @@ function PartRow({
                   {bodyTitle}
                 </div>
               )}
+              {/* 페이지 범위 — 각 정류장이 책의 어느 구간인지 즉각 파악.
+                  현재 파트만 살짝 강조, 나머지는 뮤트 톤. */}
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 500,
+                  color: isCurrent
+                    ? "#7AB894"
+                    : isPast
+                      ? "#5A7A6A"
+                      : "#4A4A4A",
+                  letterSpacing: 0.3,
+                  marginTop: 3,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                p.{part.startPage}–{part.endPage}
+              </div>
             </div>
           );
         })()}

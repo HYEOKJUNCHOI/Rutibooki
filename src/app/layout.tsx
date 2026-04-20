@@ -3,8 +3,9 @@ import "./globals.css";
 import AppShell from "@/components/auth/AppShell";
 
 // T-44: PWA 메타. Next 16은 themeColor/viewport를 Viewport 객체로 분리해야 한다.
-// apple-mobile-web-app-* 는 appleWebApp 필드로 자동 생성되고,
-// viewport-fit=cover 는 Viewport 타입 미지원이라 <head>에서 직접 <meta> 로 둔다.
+// apple-mobile-web-app-* 는 appleWebApp 필드로 자동 생성.
+// [Critical C-3] viewport-fit=cover 는 Viewport 타입의 viewportFit 필드로 지원됨.
+// 과거에는 수동 <meta> 로 중복 주입해서 Next.js 자동 메타와 충돌했음.
 export const metadata: Metadata = {
   title: "Rutibooki",
   description: "조용한 독서 동행",
@@ -25,6 +26,7 @@ export const viewport: Viewport = {
   themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -38,11 +40,6 @@ export default function RootLayout({
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
-        />
-        {/* iOS 키보드 올라와도 노치/홈바 영역까지 배경 깔리도록 viewport-fit=cover. Next Viewport 타입에 없어 수동. */}
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
       </head>
       <body className="min-h-full flex flex-col">

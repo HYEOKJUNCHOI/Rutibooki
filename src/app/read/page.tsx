@@ -1,8 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { books } from "@/data/books";
+import { books as mockBooks } from "@/data/books";
+import { Book } from "@/types/book";
+import { useBooksStore } from "@/store/booksStore";
 import { useReadingStore } from "@/store/readingStore";
 import { useBookPace } from "@/store/selectors";
 import { useVisibilityChange } from "@/hooks/useVisibilityChange";
@@ -41,8 +43,13 @@ function ReadPageInner() {
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
   const hydrated = true;
 
-  // books는 정적 목업. 찾지 못하면 홈으로.
-  const book = books.find((b) => b.id === bookId);
+  // 사용자 등록 책 + 목업 목록을 병합. 등록 책 우선.
+  // [Critical C-1] 이전엔 mockBooks 만 검색해서 등록 책 "책 펼쳤어요" 시 홈으로 튕김.
+  const registered = useBooksStore((s) => s.registered);
+  const book = useMemo(
+    () => [...registered, ...mockBooks].find((b) => b.id === bookId),
+    [registered, bookId],
+  );
 
   const getState = useReadingStore((s) => s.getState);
   const commitLog = useReadingStore((s) => s.commitLog);
@@ -78,7 +85,7 @@ function ReadPageInner() {
 }
 
 interface ReadFlowProps {
-  book: NonNullable<ReturnType<typeof books.find>>;
+  book: Book;
   startPage: number;
   commitLog: ReturnType<typeof useReadingStore.getState>["commitLog"];
   addQuote: ReturnType<typeof useReadingStore.getState>["addQuote"];
@@ -108,6 +115,10 @@ function ReadFlow({
 
   // 딴짓 복귀 오버레이는 phase를 바꾸지 않고 reading 위에 겹쳐 띄운다.
   const [absenceOpen, setAbsenceOpen] = useState(false);
+
+  // [Major M-1] 세션 시작 시각은 한 번만 확정. 이전엔 렌더마다 new Date()를 넘겨
+  // ReadingBlackScreen 내부 useEffect deps 변화 → 2분 autosave 타이머가 매번 리셋됐음.
+  const startedAtRef = useRef<string>(new Date().toISOString());
   useVisibilityChange({
     enabled: phase === "reading",
     onReturn: () => setAbsenceOpen(true),
@@ -129,7 +140,7 @@ function ReadFlow({
           <ReadingBlackScreen
             book={book}
             startPage={startPage}
-            startedAt={new Date().toISOString()}
+            startedAt={startedAtRef.current}
             onFinish={goPost}
             onCancel={onCancel}
           />
@@ -178,10 +189,7 @@ function ReadFlow({
   );
 }
 
-function findPartIndex(
-  book: NonNullable<ReturnType<typeof books.find>>,
-  page: number,
-): number {
+function findPartIndex(book: Book, page: number): number {
   const found = book.parts.find(
     (p) => page >= p.startPage && page <= p.endPage,
   );

@@ -28,24 +28,15 @@ export function useTodayTargetSection(book: Book) {
   return { section, part, range, currentPage };
 }
 
-// 히트맵용 날짜별 분 수 맵.
-export function useLogsByDate(): Record<string, number> {
-  return useReadingStore((s) => {
-    const out: Record<string, number> = {};
-    for (const log of s.logs) {
-      out[log.date] = (out[log.date] ?? 0) + log.durationSec / 60;
-    }
-    return out;
-  });
-}
-
 // 책의 누적 파트 진행도 (0~1). currentPage / totalPages 기반.
+// [Major M-4] totalPages 가 0 일 수 있어 division by zero 가드.
 export function usePartProgress(book: Book) {
   const state = useBookState(book.id);
   const currentPage = state?.currentPage ?? 0;
+  const safeTotal = Math.max(1, book.totalPages);
   return {
     currentPartIndex: getActivePart(book, currentPage || 1).index,
     totalParts: book.parts.length,
-    overallRatio: Math.min(1, Math.max(0, currentPage / book.totalPages)),
+    overallRatio: Math.min(1, Math.max(0, currentPage / safeTotal)),
   };
 }

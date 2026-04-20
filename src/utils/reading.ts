@@ -2,8 +2,12 @@ import { Book, BookPart, BookSection } from "@/types/book";
 
 const days = ["일", "월", "화", "수", "목", "금", "토"];
 
+// [Major M-4] totalPages 가 0 인 직후 등록 책(목차 추출 실패/미완) 에서는 division by zero
+// → NaN/Infinity 가 진행률 바·여정 레일 height 로 전파되어 UI 깨짐. Math.max 로 방어.
 export function calcProgress(currentPage: number, totalPages: number): number {
-  return Math.round((currentPage / totalPages) * 100);
+  if (totalPages <= 0) return 0;
+  const ratio = Math.max(0, Math.min(1, currentPage / totalPages));
+  return Math.round(ratio * 100);
 }
 
 export function formatDate(date: Date): string {

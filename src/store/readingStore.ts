@@ -6,6 +6,7 @@ import { Book } from "@/types/book";
 import { getActivePart, getActiveSection } from "@/utils/reading";
 import { auth } from "@/lib/firebase";
 import * as readingRepo from "@/lib/firestore/readingRepo";
+import { useBooksStore } from "./booksStore";
 
 // Firestore source of truth. persist 제거 — 인증 게이트 이후에만 도달한다.
 // mutation 은 Firestore write 를 병행 수행. onSnapshot 은 pull.ts / 구독 코드에서 hydrate 로 반영.
@@ -115,7 +116,11 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
     set((state) => {
       const prev = state.statesByBook[bookId];
       if (!prev) return state;
-      const book = initialBooks.find((b) => b.id === bookId);
+      // [Critical C-2] 등록 책도 책 정보를 찾을 수 있어야 함. 이전엔 목업만 봐서
+      // 사용자 등록 책의 activePartIndex/Sec 가 절대 갱신되지 않았음.
+      const book =
+        initialBooks.find((b) => b.id === bookId) ??
+        useBooksStore.getState().getById(bookId);
       let activePartIndex = prev.activePartIndex;
       let activeSectionIndex = prev.activeSectionIndex;
       if (book) {

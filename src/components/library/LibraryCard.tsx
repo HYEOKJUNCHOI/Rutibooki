@@ -6,8 +6,8 @@ import { useBookState } from "@/store/selectors";
 import { calcProgress } from "@/utils/reading";
 
 // 추출 예상 시간(ms) — 이 시간 동안 0→90% 로 스멀스멀 올라감. 실제 완료 시 100% 스냅.
-// 8~15초 걸리는 파이프라인이라 12초를 타겟으로 잡음.
-const EXTRACTION_ETA_MS = 12000;
+// 표지→검색→목차 합쳐 22~28초. 22초를 타겟으로 잡아 진행바가 90% 에 오래 멈추는 현상 완화.
+const EXTRACTION_ETA_MS = 22000;
 
 // 길게누르기 임계값 — 500ms 는 OS 컨텍스트 메뉴와 충돌 가능해 조금 아래로.
 const LONG_PRESS_MS = 420;

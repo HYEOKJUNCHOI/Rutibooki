@@ -605,10 +605,12 @@ function PartRow({
                         : "#5A5A5A",
                     letterSpacing: "-0.2px",
                     lineHeight: 1.25,
-                    // 태그가 길 수 있으나 1줄 유지 — 긴 본문은 아래줄로 내려감.
-                    whiteSpace: "nowrap",
+                    // 분할 안 된 긴 제목은 2줄까지 감싸서 보여줌(ellipsis 대신).
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
                     overflow: "hidden",
-                    textOverflow: "ellipsis",
+                    wordBreak: "keep-all",
                     flex: 1,
                     minWidth: 0,
                   }}

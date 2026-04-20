@@ -156,6 +156,7 @@ async function resolveMetaByIsbn(
     if (data.author) patch.author = normalizeAuthor(data.author);
     if (data.publisher) patch.publisher = data.publisher;
     if (data.cover) patch.coverUrl = data.cover;
+    if (data.category) patch.category = data.category;
     await updateBook(shellId, patch);
 
     return {

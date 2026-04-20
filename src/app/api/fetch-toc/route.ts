@@ -11,6 +11,8 @@ interface AladinLookupResponse {
     author?: string;
     publisher?: string;
     cover?: string;
+    // 알라딘 분류 경로. 예: "국내도서>인문학>심리학>인지심리학"
+    categoryName?: string;
     subInfo?: {
       toc?: string;
       itemPage?: number;
@@ -77,6 +79,14 @@ export async function GET(req: NextRequest) {
   const toc = item.subInfo?.toc ?? "";
   const itemPage = Number(item.subInfo?.itemPage ?? 0) || 0;
 
+  // "국내도서>인문학>심리학>인지심리학" → 리프 "인지심리학".
+  // 가장 구체적 장르만 쓰고 상위 경로는 버림. 국내도서/외국도서 같은 상단 루트는 자연히 드랍됨.
+  const segments = (item.categoryName ?? "")
+    .split(">")
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "국내도서" && s !== "외국도서");
+  const category = segments[segments.length - 1] ?? "";
+
   return NextResponse.json({
     toc,
     itemPage,
@@ -85,6 +95,7 @@ export async function GET(req: NextRequest) {
     publisher: item.publisher ?? "",
     cover: item.cover ?? "",
     isbn13: item.isbn13 ?? "",
+    category,
   });
 }
 

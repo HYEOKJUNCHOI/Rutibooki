@@ -37,6 +37,9 @@ export interface Book {
   // Gemini Vision 이 표지에서 추론한 장르(자기계발/경영/에세이/소설 등).
   // 목업 책은 비어있고, 사용자 등록 책에만 채워짐.
   genre?: string;
+  // 알라딘 분류 리프. 예: "인지심리학". 서재 칩/그룹핑에 사용.
+  // categoryName 의 맨 끝 세그먼트만 저장 — 상위 경로는 필요해지면 재파싱.
+  category?: string;
   // 출판사 — FullJourney 시작 노드의 보조 메타. extract-cover 에서 같이 추출됨.
   publisher?: string;
   // 백그라운드 등록 파이프라인 상태. undefined = ready(모든 필드 확정), "extracting" = 아직 분석 중,

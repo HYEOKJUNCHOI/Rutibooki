@@ -357,6 +357,25 @@ export default function FullJourney({
           >
             {book.author}
           </div>
+          {/* 알라딘 분류 리프 — 인지심리학 / 자기계발 / 소설 같은 작은 칩. */}
+          {book.category && (
+            <div
+              style={{
+                marginTop: 6,
+                display: "inline-block",
+                padding: "2px 6px",
+                borderRadius: 4,
+                fontSize: 9,
+                fontWeight: 600,
+                color: "#B8D4FF",
+                background: "rgba(90,140,220,0.12)",
+                border: "1px solid rgba(90,140,220,0.35)",
+                letterSpacing: "-0.1px",
+              }}
+            >
+              {book.category}
+            </div>
+          )}
         </div>
 
         {/* 파트 노드 + 라벨 */}

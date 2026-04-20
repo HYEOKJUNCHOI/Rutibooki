@@ -37,9 +37,17 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full">
       <head>
+        {/*
+          [Security MED #8] Pretendard CDN 하드닝.
+          - npm 패키지 pinned 버전으로 고정(gh/main → 무버전 = 공급망 공격 취약).
+          - crossOrigin=anonymous + referrerPolicy=no-referrer 로 referer 누출 차단.
+          - 완전한 SRI 해시는 셀프 호스팅(T-후속) 때 도입. CDN pinned 로 1단계 방어.
+        */}
         <link
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+          href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.min.css"
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
         />
       </head>
       <body className="min-h-full flex flex-col">

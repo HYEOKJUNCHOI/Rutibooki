@@ -21,14 +21,34 @@ const PROMPT = `너는 책 목차 이미지에서 구조를 추출하는 OCR/구
   "confidence": 0.87
 }`;
 
+// [Security HIGH #4] 파일 업로드 검증 — 크기·MIME·개수 제한으로 DoS/비용 공격 차단.
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB — 고해상도 스캔 허용
+const MAX_FILES = 3;
+
 export async function POST(req: NextRequest) {
   const form = await req.formData();
   const images = form.getAll("image") as File[];
   if (images.length === 0) {
-    return NextResponse.json(
-      { error: "no_images" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "no_images" }, { status: 400 });
+  }
+  if (images.length > MAX_FILES) {
+    return NextResponse.json({ error: "too_many_files" }, { status: 400 });
+  }
+  for (const img of images) {
+    if (img.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "file_too_large" },
+        { status: 413 },
+      );
+    }
+    // type 이 비어있으면(일부 카메라) 거부. 빈 값 폴백하지 않음.
+    if (!ALLOWED_MIME.includes(img.type)) {
+      return NextResponse.json(
+        { error: "unsupported_media_type" },
+        { status: 415 },
+      );
+    }
   }
 
   const apiKey = process.env.GEMINI_API_KEY;

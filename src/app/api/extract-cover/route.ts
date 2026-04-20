@@ -14,6 +14,11 @@ interface ExtractCoverBody {
   image?: string; // base64 data URL (e.g. "data:image/jpeg;base64,...")
 }
 
+// [Security HIGH #5] body 크기/MIME 검증 — 무제한 업로드로 인한 DoS/비용 공격 차단.
+// base64 는 원본 대비 ~1.37x 팽창 → raw 5MB ≈ base64 6.8MB. 여유 있게 7.5MB 상한.
+const MAX_BASE64_LEN = 7.5 * 1024 * 1024;
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+
 export async function POST(req: NextRequest) {
   let body: ExtractCoverBody;
   try {
@@ -26,6 +31,9 @@ export async function POST(req: NextRequest) {
   if (!image || typeof image !== "string") {
     return NextResponse.json({ error: "no_image" }, { status: 400 });
   }
+  if (image.length > MAX_BASE64_LEN) {
+    return NextResponse.json({ error: "file_too_large" }, { status: 413 });
+  }
 
   // data URL 파싱. 포맷: data:<mime>;base64,<data>
   const match = image.match(/^data:(.+?);base64,(.+)$/);
@@ -34,6 +42,13 @@ export async function POST(req: NextRequest) {
   }
   const mimeType = match[1];
   const base64 = match[2];
+
+  if (!ALLOWED_MIME.includes(mimeType)) {
+    return NextResponse.json(
+      { error: "unsupported_media_type" },
+      { status: 415 },
+    );
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {

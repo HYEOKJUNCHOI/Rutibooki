@@ -179,28 +179,46 @@ export default function FullJourney({
             paddingRight: 4,
           }}
         >
-          <span
-            style={{
-              fontSize: 32,
-              fontWeight: 400,
-              color: "#00FF7A",
-              letterSpacing: "-0.8px",
-              lineHeight: 1,
-              textShadow: "0 0 10px rgba(0,255,122,0.35)",
-            }}
-          >
-            {overall}
+          {overall === 0 ? (
+            // 0% 는 "아직 0" 이 아니라 "이제 시작" 의 상태 — 숫자 대신 CTA 성 문구.
+            // 앱 버튼 "책 펼쳤어요" 와 톤 통일 위해 "펼쳐보기".
             <span
               style={{
-                fontSize: 13,
-                color: "#00B858",
-                marginLeft: 2,
-                fontWeight: 500,
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#00FF7A",
+                letterSpacing: "-0.3px",
+                lineHeight: 1,
+                textShadow: "0 0 10px rgba(0,255,122,0.35)",
+                whiteSpace: "nowrap",
               }}
             >
-              %
+              펼쳐보기
             </span>
-          </span>
+          ) : (
+            <span
+              style={{
+                fontSize: 32,
+                fontWeight: 400,
+                color: "#00FF7A",
+                letterSpacing: "-0.8px",
+                lineHeight: 1,
+                textShadow: "0 0 10px rgba(0,255,122,0.35)",
+              }}
+            >
+              {overall}
+              <span
+                style={{
+                  fontSize: 13,
+                  color: "#00B858",
+                  marginLeft: 2,
+                  fontWeight: 500,
+                }}
+              >
+                %
+              </span>
+            </span>
+          )}
         </div>
 
         {/* 커버 + 메타 블록 */}

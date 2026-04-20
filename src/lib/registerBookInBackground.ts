@@ -243,20 +243,26 @@ async function callExtractToc(
   files: File[],
   aladinTotal: number,
 ): Promise<ExtractTocResult | null> {
-  // 원본 대신 1600px JPEG 로 리사이즈 — 서버 용량 한계/Gemini 비용 절감.
-  const resized: Blob[] = await Promise.all(
-    files.map(async (f) => {
-      try {
-        // 1800px — Vercel 서버리스 요청 바디 4.5MB 제한 회피.
-        // 2400 3장 = 바디 초과로 edge 에서 413 차단(함수 로그 안 남음).
-        // Flash OCR 품질은 1800 에서도 거의 유지.
-        const dataUrl = await fileToResizedDataUrl(f, 1800);
-        return await (await fetch(dataUrl)).blob();
-      } catch {
-        return f;
-      }
-    }),
-  );
+  // 원본 → JPEG 리사이즈. 1800px 시작 → 바디 한도 초과면 단계적 축소.
+  // Vercel 서버리스 바디 4.5MB 제한. 3.8MB 를 목표로 가드(폼 경계 오버헤드 여유).
+  const MAX_BODY_BYTES = 3.8 * 1024 * 1024;
+  const SIZES = [1800, 1400, 1100, 900];
+  let resized: Blob[] = [];
+  for (const edge of SIZES) {
+    resized = await Promise.all(
+      files.map(async (f) => {
+        try {
+          const dataUrl = await fileToResizedDataUrl(f, edge);
+          return await (await fetch(dataUrl)).blob();
+        } catch {
+          return f as Blob;
+        }
+      }),
+    );
+    const total = resized.reduce((acc, b) => acc + b.size, 0);
+    if (total <= MAX_BODY_BYTES) break;
+    // 넘치면 다음 단계로.
+  }
 
   const form = new FormData();
   resized.forEach((blob, i) => {

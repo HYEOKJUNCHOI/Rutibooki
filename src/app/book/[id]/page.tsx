@@ -7,7 +7,6 @@ import { useBooksStore } from "@/store/booksStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
 import { formatDateShort, getDayLabel } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
-import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import TodayCard from "@/components/book/TodayCard";
 import FullJourney from "@/components/book/FullJourney";
 import RestNudge from "@/components/book/RestNudge";
@@ -148,18 +147,14 @@ export default function BookDetailPage({
           </button>
         </div>
 
-        {/* 단권 상세 — BookCoverSwipe 는 스와이프 비활성 모드로 뒤집기만 유지 */}
-        <BookCoverSwipe
-          books={coverBooks}
-          covers={covers}
-          selectedIdx={0}
-          onSelect={() => {}}
+        {/* 여정 카드 v3 — 커버를 레일의 시작점으로. 커버→파트→완독 연속 흐름. */}
+        <FullJourney
+          book={selectedBook}
+          currentPage={currentPage}
+          coverUrl={covers[0] ?? null}
         />
 
         <TodayCard book={selectedBook} />
-
-        {/* 에디토리얼 타임라인 여정 v2 — 왼쪽 레일 + 현재 파트만 펼침. 고정 뷰포트 수렴. */}
-        <FullJourney book={selectedBook} currentPage={currentPage} />
 
         <button
           onClick={handleOpenBook}

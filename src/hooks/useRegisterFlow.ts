@@ -37,6 +37,8 @@ export interface RegisterFlowState {
   author: string;
   // Gemini Vision 이 추론한 장르. handleSave 에서 Book.genre 로 흘러감.
   genre: string;
+  // 출판사 — FullJourney 시작 노드에서 저자와 나란히 표시.
+  publisher: string;
   naverCoverUrl: string | null;
   tocResult: TocResult | null;
   tocError: string | null;
@@ -55,6 +57,7 @@ export function useRegisterFlow() {
     title: "",
     author: "",
     genre: "",
+    publisher: "",
     naverCoverUrl: null,
     tocResult: null,
     tocError: null,
@@ -285,6 +288,8 @@ export function useRegisterFlow() {
           typeof data.author === "string" ? data.author.trim() : "";
         const extractedGenre =
           typeof data.genre === "string" ? data.genre.trim() : "";
+        const extractedPublisher =
+          typeof data.publisher === "string" ? data.publisher.trim() : "";
 
         setState((s) => ({
           ...s,
@@ -292,10 +297,11 @@ export function useRegisterFlow() {
           coverExtractError: null,
           coverStatus: "done",
           cover: s.cover ? { ...s.cover, status: "done" } : null,
-          // 사용자가 이미 입력한 값은 덮지 않음. 장르는 사용자가 직접 입력할 필드가 아니라 항상 덮음.
+          // 사용자가 이미 입력한 값은 덮지 않음. 장르·출판사는 사용자가 직접 입력할 필드가 아니라 항상 덮음.
           title: s.title || extractedTitle,
           author: s.author || extractedAuthor,
           genre: extractedGenre || s.genre,
+          publisher: extractedPublisher || s.publisher,
         }));
       } catch (e) {
         setState((s) => ({

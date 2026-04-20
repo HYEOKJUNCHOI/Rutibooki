@@ -130,6 +130,7 @@ export default function RegisterPage() {
         parts,
         registeredAt: new Date().toISOString(),
         genre: state.genre.trim() || undefined,
+        publisher: state.publisher.trim() || undefined,
       };
 
       addBook(book);

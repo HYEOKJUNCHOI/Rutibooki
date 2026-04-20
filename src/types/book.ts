@@ -33,4 +33,6 @@ export interface Book {
   // Gemini Vision 이 표지에서 추론한 장르(자기계발/경영/에세이/소설 등).
   // 목업 책은 비어있고, 사용자 등록 책에만 채워짐.
   genre?: string;
+  // 출판사 — FullJourney 시작 노드의 보조 메타. extract-cover 에서 같이 추출됨.
+  publisher?: string;
 }

@@ -356,7 +356,6 @@ export default function FullJourney({
             }}
           >
             {book.author}
-            {book.publisher ? ` · ${book.publisher}` : ""}
           </div>
         </div>
 

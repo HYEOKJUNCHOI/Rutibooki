@@ -6,14 +6,15 @@ import { Book } from "@/types/book";
 export const books: Book[] = [
   // === books[0]: MVP 메인 책 (실파트 예시) ===
   // 실제 목차 기준 — START / LEVEL 0~4 / ERROR / END 의 8 파트 구조.
-  // 프롤로그(8)·들어가며(16) 는 파트 1 범위에 흡수, 에필로그(444)·참고자료(452) 는 END 에 흡수.
+  // 프롤로그(8)·들어가며(16) 는 파트 1 범위에 흡수, 에필로그(444) 는 END 에 흡수.
+  // 참고자료(452-460) 는 사용자가 실제로 읽지 않는 부가자료라 제외 — 총 페이지도 451 로 축소.
   {
     id: "primitive",
     title: "완벽한 원시인",
     author: "자청",
     publisher: "웅진지식하우스",
     searchQuery: "완벽한 원시인 자청",
-    totalPages: 460,
+    totalPages: 451,
     registeredAt: "2026-04-10",
     parts: [
       {
@@ -102,13 +103,12 @@ export const books: Book[] = [
         index: 8,
         title: "END · 궁극의 질문 — 고차원 사고를 갖게 된 돌연변이 원시인",
         startPage: 391,
-        endPage: 460,
+        endPage: 451,
         sections: [
           { title: "당신의 기원", startPage: 391, endPage: 412 },
           { title: "생각하는 종의 출현", startPage: 413, endPage: 423 },
           { title: "개체의 시대", startPage: 424, endPage: 443 },
           { title: "에필로그 · 멸종 위기종", startPage: 444, endPage: 451 },
-          { title: "참고 자료", startPage: 452, endPage: 460 },
         ],
       },
     ],

@@ -30,9 +30,9 @@ const COVER_H = 74;
 const COVER_Y = 0; // 커버 상단 y.
 const COVER_BOTTOM_Y = COVER_Y + COVER_H;
 const RAIL_START_Y = COVER_BOTTOM_Y + 4; // 커버 바로 아래에서 레일 시작.
-const PART_ROW_H = 72; // 파트 행 기본 높이. 긴 제목 2줄 줄바꿈 수용.
-const CURRENT_EXTRA = 26; // 현재 파트 섹션 스트립 공간.
-const GOAL_GAP = 34; // 마지막 파트 → 완독 여백.
+// 책(커버) → PART 1 간격을 기준 단위로, 모든 정류장 사이를 균등 간격으로 배치.
+// 현재 파트의 섹션 스트립은 별도 행 높이를 먹지 않고 라벨 블록 안에서 오버플로우 — 레이아웃 리듬 보존.
+const STEP_Y = 64; // 정류장(커버 포함) 간 도로 길이.
 
 export default function FullJourney({
   book,
@@ -51,18 +51,15 @@ export default function FullJourney({
   const activeSectionKey = `${activeSection.startPage}-${activeSection.endPage}`;
   const isFinished = overall >= 100;
 
-  // 각 파트 노드의 y — 현재 파트는 섹션 스트립 공간 확보.
+  // 각 파트 노드의 y — 커버→PART1 간격(STEP_Y)을 기준으로 모든 정류장 균등 간격.
+  // 현재 파트의 섹션 스트립은 라벨 블록 안에서 자연스럽게 흘러내림(행 높이를 별도로 먹지 않음).
   const partYs: number[] = [];
-  let cursor = RAIL_START_Y + PART_ROW_H / 2; // 첫 파트 중심 위치
   for (let i = 0; i < book.parts.length; i++) {
-    partYs.push(cursor);
-    const rowH =
-      PART_ROW_H + (i === currentPartIdx ? CURRENT_EXTRA : 0);
-    // 다음 파트까지 거리 — 이번 행의 남은 절반 + 다음 행의 절반.
-    cursor += rowH / 2 + PART_ROW_H / 2;
+    partYs.push(COVER_BOTTOM_Y + STEP_Y + i * STEP_Y);
   }
-  const goalY = partYs[partYs.length - 1] + PART_ROW_H / 2 + GOAL_GAP;
-  const svgHeight = goalY + 12;
+  const goalY = partYs[partYs.length - 1] + STEP_Y;
+  // 현재 파트의 섹션 스트립이 라벨 블록 아래로 내려오므로 svgHeight 는 여유를 둠.
+  const svgHeight = goalY + (currentPartIdx >= 0 ? 24 : 12);
 
   // 파트 노드 x — 다주파 합성으로 유기적 굴곡. 단일 sin 은 대칭이라 "지하철 노선도" 느낌.
   // 저주파 2π + 고주파 5π*0.3 결합 → 대칭성 깨고 동네 골목 도는 버스 노선 감성.

@@ -271,16 +271,19 @@ async function callExtractToc(
   files: File[],
   aladinTotal: number,
 ): Promise<ExtractTocResult | null> {
-  // 원본 → JPEG 리사이즈. 1800px 시작 → 바디 한도 초과면 단계적 축소.
-  // Vercel 서버리스 바디 4.5MB 제한. 3.8MB 를 목표로 가드(폼 경계 오버헤드 여유).
+  // 2-stage 파이프라인:
+  //   1) /api/ocr-vision  — Cloud Vision 으로 순수 텍스트만 뽑음 (호출당 flat rate).
+  //   2) /api/extract-toc-text — 추출된 텍스트를 Gemini 텍스트-전용 모드로 구조화.
+  // Cloud Vision 은 해상도에 따른 가격 증가 없음 → 1400px 까지 올려 OCR 정확도 우선.
+  // 흑백+대비 부스트는 유지 (OCR 엔진이 이미 전처리하지만 해치지 않음).
   const MAX_BODY_BYTES = 3.8 * 1024 * 1024;
-  const SIZES = [1800, 1400, 1100, 900];
+  const SIZES = [1400, 1100, 900];
   let resized: Blob[] = [];
   for (const edge of SIZES) {
     resized = await Promise.all(
       files.map(async (f) => {
         try {
-          const dataUrl = await fileToResizedDataUrl(f, edge);
+          const dataUrl = await fileToResizedDataUrl(f, edge, true);
           return await (await fetch(dataUrl)).blob();
         } catch {
           return f as Blob;
@@ -289,7 +292,6 @@ async function callExtractToc(
     );
     const total = resized.reduce((acc, b) => acc + b.size, 0);
     if (total <= MAX_BODY_BYTES) break;
-    // 넘치면 다음 단계로.
   }
 
   const form = new FormData();
@@ -303,37 +305,49 @@ async function callExtractToc(
     );
   });
 
-  // 3회 retry — Gemini 429 대응.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const r = await fetch("/api/extract-toc", {
-        method: "POST",
-        body: form,
-      });
-      if (!r.ok) {
-        await wait(500 * (attempt + 1));
-        continue;
-      }
-      const data = await r.json();
-      if (data.error) {
-        await wait(500 * (attempt + 1));
-        continue;
-      }
-      const rawParts = (data.parts ?? []) as BookPart[];
-      const { parts } = postProcessParts(
-        rawParts,
-        aladinTotal || data.totalPages,
-      );
-      const totalPages = aladinTotal || data.totalPages || 0;
-      if (parts.length > 0 && totalPages > 0) {
-        return { parts, totalPages };
-      }
+  // Stage 1: OCR
+  let ocrText: string;
+  try {
+    const r = await fetch("/api/ocr-vision", { method: "POST", body: form });
+    if (!r.ok) {
+      console.warn("[bg-register] ocr-vision failed", r.status);
       return null;
-    } catch {
-      // 네트워크 오류 — 다음 retry 로.
     }
+    const data = await r.json();
+    if (data.error || typeof data.text !== "string" || !data.text) {
+      console.warn("[bg-register] ocr-vision empty", data);
+      return null;
+    }
+    ocrText = data.text;
+    console.log("[bg-register] ocr-vision ok, textLen", ocrText.length);
+  } catch (e) {
+    console.warn("[bg-register] ocr-vision fetch fail", e);
+    return null;
   }
-  return null;
+
+  // Stage 2: 구조화
+  try {
+    const r = await fetch("/api/extract-toc-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: ocrText }),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (data.error) return null;
+    const rawParts = (data.parts ?? []) as BookPart[];
+    const { parts } = postProcessParts(
+      rawParts,
+      aladinTotal || data.totalPages,
+    );
+    const totalPages = aladinTotal || data.totalPages || 0;
+    if (parts.length > 0 && totalPages > 0) {
+      return { parts, totalPages };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -352,6 +366,7 @@ function fileToDataUrl(file: File): Promise<string> {
 async function fileToResizedDataUrl(
   file: File,
   maxEdge: number,
+  enhance: boolean = false,
 ): Promise<string> {
   if (typeof document === "undefined" || typeof Image === "undefined") {
     return fileToDataUrl(file);
@@ -365,8 +380,9 @@ async function fileToResizedDataUrl(
       el.src = originalUrl;
     });
     const longest = Math.max(img.naturalWidth, img.naturalHeight);
-    if (longest <= maxEdge) return await fileToDataUrl(file);
-    const scale = maxEdge / longest;
+    const needResize = longest > maxEdge;
+    if (!needResize && !enhance) return await fileToDataUrl(file);
+    const scale = needResize ? maxEdge / longest : 1;
     const w = Math.round(img.naturalWidth * scale);
     const h = Math.round(img.naturalHeight * scale);
     const canvas = document.createElement("canvas");
@@ -375,6 +391,24 @@ async function fileToResizedDataUrl(
     const ctx = canvas.getContext("2d");
     if (!ctx) return await fileToDataUrl(file);
     ctx.drawImage(img, 0, 0, w, h);
+
+    if (enhance) {
+      // 흑백 + 대비 부스트 — OCR 가독성 향상.
+      // 타일 토큰은 해상도로만 결정되므로 비용엔 영향 없음. 정확도 ↑ → 재시도 ↓ 로 간접 절감.
+      // 방식: 휘도 변환 후 중간값(128) 기준 대비 1.5배 스트레치. 흰 배경은 더 희게, 글자는 더 검게.
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const contrast = 1.5;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray =
+          0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        const stretched = (gray - 128) * contrast + 128;
+        const clamped = Math.max(0, Math.min(255, stretched));
+        data[i] = data[i + 1] = data[i + 2] = clamped;
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
     return canvas.toDataURL("image/jpeg", 0.85);
   } finally {
     URL.revokeObjectURL(originalUrl);

@@ -728,8 +728,7 @@ function PartRow({
                   {bodyTitle}
                 </div>
               )}
-              {/* 현재 파트: 지금 읽고 있는 소제목 한 줄 (페이지 범위보다 "어디 읽는 중" 이 더 유용).
-                  지난 파트: 페이지 범위 유지. 미래 파트: 정류장 원에 시작 페이지가 박혀있어 생략. */}
+              {/* 현재 파트만 "지금 읽는 소제목" 한 줄. 지난·미래 파트는 체크 아이콘/정류장 원만으로 충분. */}
               {isCurrent ? (
                 <div
                   style={{
@@ -744,19 +743,6 @@ function PartRow({
                   }}
                 >
                   {activeSectionTitle}
-                </div>
-              ) : isPast ? (
-                <div
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 500,
-                    color: "#5A7A6A",
-                    letterSpacing: 0.3,
-                    marginTop: 3,
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  p.{part.startPage}–{part.endPage}
                 </div>
               ) : null}
             </div>

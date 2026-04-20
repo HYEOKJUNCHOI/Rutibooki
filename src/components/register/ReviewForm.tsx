@@ -23,6 +23,7 @@ import {
 } from "./ReviewForm.style";
 
 // 사진(표지+목차) 기반 등록 검수 화면. 사용자 업로드 이미지에서 Gemini 로 메타·파트 추출.
+// 흐름: 표지·목차 사진을 다 넣고 "불러오기" 1번 탭 → 제목/저자/목차 동시 추출(체크리스트 4단계).
 
 type Flow = ReturnType<typeof useRegisterFlow>;
 
@@ -30,10 +31,18 @@ interface Props {
   flow: Flow;
 }
 
+type StepState = "pending" | "running" | "done" | "error";
+interface OverlayStep {
+  key: string;
+  label: string;
+  state: StepState;
+}
+
 export default function ReviewForm({ flow }: Props) {
   const router = useRouter();
   const {
     state,
+    setCover,
     clearCover,
     setTocSlot,
     clearTocSlot,
@@ -47,143 +56,91 @@ export default function ReviewForm({ flow }: Props) {
 
   const addBook = useBooksStore((s) => s.addBook);
   const [saving, setSaving] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  // 저장 흐름이 내부적으로 extractToc 를 트리거할 때는 오버레이를 숨김 — 통일된 "불러오기" UX 유지.
+  const suppressOverlayRef = useRef(false);
 
-  // 추출 진행 오버레이 — 표지(표지/제목/작가) + 목차 4 단계.
-  // Gemini 응답이 한 번에 오므로 완료 연출만 300ms 씩 스테거링해 "체크리스트 찍히는 느낌" 을 냄.
-  type StepState = "pending" | "running" | "done" | "error";
-  interface OverlayStep {
-    key: string;
-    label: string;
-    state: StepState;
-  }
-  const [overlay, setOverlay] = useState<{
-    open: boolean;
-    steps: OverlayStep[];
-  }>({ open: false, steps: [] });
+  // 오버레이 단계 — flow 상태를 그대로 계산해 화면에 반영.
+  // Gemini 표지 1회 호출이 제목·저자·장르를 같이 돌려주므로 cover/title/author 는 동일 페이즈를 공유.
+  const steps: OverlayStep[] = useMemo(() => {
+    const coverPhase: StepState = state.coverExtractError
+      ? "error"
+      : state.coverExtracting
+        ? "running"
+        : state.cover && state.title.trim().length > 0
+          ? "done"
+          : "pending";
+    const tocPhase: StepState = state.tocError
+      ? "error"
+      : state.extracting
+        ? "running"
+        : (state.tocResult?.parts.length ?? 0) > 0
+          ? "done"
+          : "pending";
+    return [
+      { key: "cover", label: "책표지 불러오기", state: coverPhase },
+      { key: "title", label: "제목 불러오기", state: coverPhase },
+      { key: "author", label: "저자 불러오기", state: coverPhase },
+      { key: "toc", label: "목차 불러오기", state: tocPhase },
+    ];
+  }, [
+    state.coverExtracting,
+    state.coverExtractError,
+    state.cover,
+    state.title,
+    state.extracting,
+    state.tocError,
+    state.tocResult,
+  ]);
 
-  // 표지 추출 → 시작 시 표지/제목/작가 3 단계 러닝, 종료 후 순차 done.
-  const prevCoverExtractingRef = useRef(false);
+  // 모든 단계가 done 또는 마지막 한 단계라도 error 로 끝났을 때 오버레이를 닫아준다.
+  // 끝난 뒤 잠시(700ms) 체크 표시를 보여주고 자연스럽게 페이드아웃.
   useEffect(() => {
-    const was = prevCoverExtractingRef.current;
-    const now = state.coverExtracting;
-    prevCoverExtractingRef.current = now;
-
-    if (!was && now) {
-      setOverlay({
-        open: true,
-        steps: [
-          { key: "cover", label: "책표지 불러오기", state: "running" },
-          { key: "title", label: "제목 불러오기", state: "pending" },
-          { key: "author", label: "작가 불러오기", state: "pending" },
-        ],
-      });
-      return;
-    }
-
-    if (was && !now) {
-      // 실패면 error 마크만 찍고 잠시 뒤 닫기.
-      if (state.coverExtractError) {
-        setOverlay((o) => ({
-          ...o,
-          steps: o.steps.map((s) =>
-            s.state === "running" ? { ...s, state: "error" } : s,
-          ),
-        }));
-        const t = setTimeout(
-          () => setOverlay((o) => ({ ...o, open: false })),
-          1200,
-        );
-        return () => clearTimeout(t);
-      }
-
-      // 성공 → 300ms 간격으로 순차 done.
-      const keys = ["cover", "title", "author"];
-      const timers: number[] = [];
-      keys.forEach((k, i) => {
-        const t = window.setTimeout(() => {
-          setOverlay((o) => ({
-            ...o,
-            steps: o.steps.map((s) =>
-              s.key === k ? { ...s, state: "done" } : s,
-            ),
-          }));
-        }, i * 300);
-        timers.push(t);
-      });
-      const closeT = window.setTimeout(
-        () => setOverlay((o) => ({ ...o, open: false })),
-        300 * keys.length + 500,
-      );
-      timers.push(closeT);
-      return () => timers.forEach(clearTimeout);
-    }
-  }, [state.coverExtracting, state.coverExtractError]);
-
-  // 목차 추출 오버레이 — 단일 단계.
-  const prevExtractingRef = useRef(false);
-  useEffect(() => {
-    const was = prevExtractingRef.current;
-    const now = state.extracting;
-    prevExtractingRef.current = now;
-
-    if (!was && now) {
-      setOverlay({
-        open: true,
-        steps: [
-          { key: "toc", label: "목차 불러오기", state: "running" },
-        ],
-      });
-      return;
-    }
-
-    if (was && !now) {
-      if (state.tocError) {
-        setOverlay((o) => ({
-          ...o,
-          steps: o.steps.map((s) => ({ ...s, state: "error" as StepState })),
-        }));
-        const t = setTimeout(
-          () => setOverlay((o) => ({ ...o, open: false })),
-          1200,
-        );
-        return () => clearTimeout(t);
-      }
-      setOverlay((o) => ({
-        ...o,
-        steps: o.steps.map((s) => ({ ...s, state: "done" as StepState })),
-      }));
-      const t = setTimeout(
-        () => setOverlay((o) => ({ ...o, open: false })),
-        700,
-      );
-      return () => clearTimeout(t);
-    }
-  }, [state.extracting, state.tocError]);
+    if (!overlayOpen) return;
+    const running = steps.some((s) => s.state === "running");
+    if (running) return;
+    const hasError = steps.some((s) => s.state === "error");
+    const t = setTimeout(() => setOverlayOpen(false), hasError ? 1400 : 700);
+    return () => clearTimeout(t);
+  }, [steps, overlayOpen]);
 
   // 저장 조건: 표지(사용자/네이버/알라딘 어느 것이든) + 제목 + 목차 결과(파트 존재).
-  // 사진 모드에선 tocResult 없이도 extractToc 가 handleSave 안에서 자동 트리거되므로
-  // tocSlots 가 채워져 있으면 활성화. 검색/바코드 모드에선 tocResult 가 이미 있어야 함.
+  // 검색·바코드 경로에서는 사진 없이도 통과. 사진 경로에서는 "불러오기" 를 먼저 눌러야 저장 활성화.
   const canSave = useMemo(() => {
     const hasCover = state.cover !== null || state.naverCoverUrl !== null;
     const hasTitle = state.title.trim().length > 0;
-    const hasTocImage = TOC_SLOT_KEYS.some((k) => state.tocSlots[k] !== null);
     const hasTocResult = (state.tocResult?.parts.length ?? 0) > 0;
     return (
       hasCover &&
       hasTitle &&
-      (hasTocImage || hasTocResult) &&
+      hasTocResult &&
       !state.extracting &&
       !state.coverExtracting &&
       !saving
     );
   }, [state, saving]);
 
-  const canExtract = useMemo(() => {
+  // "불러오기" 활성화 조건 — 표지 + 목차 슬롯 1장 이상.
+  const canExtractAll = useMemo(() => {
+    const hasCoverFile = state.cover !== null;
+    const hasTocImage = TOC_SLOT_KEYS.some((k) => state.tocSlots[k] !== null);
     return (
-      TOC_SLOT_KEYS.some((k) => state.tocSlots[k] !== null) &&
-      !state.extracting
+      hasCoverFile &&
+      hasTocImage &&
+      !state.extracting &&
+      !state.coverExtracting
     );
-  }, [state.tocSlots, state.extracting]);
+  }, [state.cover, state.tocSlots, state.extracting, state.coverExtracting]);
+
+  const handleExtractAll = async () => {
+    if (!canExtractAll) return;
+    const coverFile = state.cover?.file;
+    if (!coverFile) return;
+    setOverlayOpen(true);
+    // 표지 OCR + 목차 추출 병렬 — Gemini 호출 2건이 동시에 날아감.
+    // 네트워크 병목은 있지만 사용자 대기 체감 시간이 짧아져 체크리스트 연출이 자연스러움.
+    await Promise.all([extractCoverFromImage(coverFile), extractToc()]);
+  };
 
   const handleSave = async () => {
     if (saving) return;
@@ -192,9 +149,11 @@ export default function ReviewForm({ flow }: Props) {
       let parts = state.tocResult?.parts ?? [];
       let totalPages = state.tocResult?.totalPages ?? 0;
 
-      // 사진 모드에서 아직 추출 전이면 자동으로 돌린다.
+      // 혹시 "불러오기" 없이 저장을 누른 경우 — 목차만 조용히 돌린다(체크리스트 스킵).
       if (parts.length === 0) {
+        suppressOverlayRef.current = true;
         const result = await extractToc();
+        suppressOverlayRef.current = false;
         if (!result || result.parts.length === 0) return;
         parts = result.parts;
         totalPages = result.totalPages ?? parts.at(-1)?.endPage ?? 0;
@@ -227,7 +186,7 @@ export default function ReviewForm({ flow }: Props) {
 
   return (
     <>
-      <ExtractProgressOverlay open={overlay.open} steps={overlay.steps} />
+      <ExtractProgressOverlay open={overlayOpen} steps={steps} />
 
       <section>
         <div style={sectionTitleStyle}>표지</div>
@@ -239,8 +198,8 @@ export default function ReviewForm({ flow }: Props) {
               state.cover?.previewUrl ?? state.naverCoverUrl ?? null
             }
             status={state.coverStatus}
-            // 표지 슬롯에 사진이 들어오면 곧장 OCR 실행 — 별도 "찾기" 버튼 제거.
-            onPick={extractCoverFromImage}
+            // 이제 표지 픽 = 저장만. 추출은 아래 "불러오기" 가 일괄 수행.
+            onPick={setCover}
             onClear={state.cover ? clearCover : undefined}
           />
         </div>
@@ -294,15 +253,18 @@ export default function ReviewForm({ flow }: Props) {
           })}
         </div>
 
-        {canExtract && (
-          <button
-            onClick={extractToc}
-            disabled={!canExtract}
-            style={extractBtnStyle(canExtract)}
-          >
-            {state.extracting ? "목차 추출 중…" : "목차에서 파트 추출"}
-          </button>
-        )}
+        {/* 통합 "불러오기" — 표지+목차 동시 추출. 체크리스트 오버레이가 진행 상황을 알려줌. */}
+        <button
+          onClick={handleExtractAll}
+          disabled={!canExtractAll}
+          style={extractBtnStyle(canExtractAll)}
+        >
+          {state.extracting || state.coverExtracting
+            ? "불러오는 중…"
+            : hasToc
+              ? "다시 불러오기"
+              : "불러오기"}
+        </button>
 
         {state.tocError && (
           <p style={errorMsgStyle}>
@@ -359,4 +321,3 @@ function slugify(title: string): string {
     .replace(/\s+/g, "-")
     .replace(/[^\p{L}\p{N}-]/gu, "");
 }
-

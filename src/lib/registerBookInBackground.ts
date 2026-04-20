@@ -302,23 +302,45 @@ export async function updateTocForExistingBook(
   const existing = registered.find((b) => b.id === bookId);
   const aladinTotal = existing?.totalPages ?? 0;
 
-  await updateBook(bookId, { extractionStep: "목차 정리중" });
+  await updateBook(bookId, {
+    status: "extracting",
+    extractionStep: "목차 정리중",
+    extractionStartedAt: new Date().toISOString(),
+  });
   try {
     const result = await callExtractToc(tocFiles, aladinTotal);
     if (!result) {
-      await clearExtractionStep(bookId);
+      await clearExtractingFlags(bookId);
       return false;
     }
     await updateBook(bookId, {
       parts: result.parts,
       totalPages: result.totalPages,
     });
-    await clearExtractionStep(bookId);
+    await clearExtractingFlags(bookId);
     return true;
   } catch (e) {
     console.warn("[update-toc] fail", e);
-    await clearExtractionStep(bookId);
+    await clearExtractingFlags(bookId);
     return false;
+  }
+}
+
+// 목차 재등록 끝난 뒤 status/step/startedAt 을 한꺼번에 Firestore 에서 삭제.
+// clearExtractionStep 은 step 하나만 지워 status=extracting 이 박제되는 이슈가 있었음.
+async function clearExtractingFlags(bookId: string) {
+  const { auth, db } = await import("@/lib/firebase");
+  const { doc, updateDoc, deleteField } = await import("firebase/firestore");
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  try {
+    await updateDoc(doc(db, "users", uid, "books", bookId), {
+      status: deleteField(),
+      extractionStep: deleteField(),
+      extractionStartedAt: deleteField(),
+    });
+  } catch (e) {
+    console.warn("[update-toc] clear flags fail", e);
   }
 }
 

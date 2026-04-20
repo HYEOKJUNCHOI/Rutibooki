@@ -47,4 +47,7 @@ export interface Book {
   status?: "extracting" | "failed";
   // 추출 파이프라인 현재 단계 라벨. "표지" | "검색" | "목차" 등 짧게. 완료 시 삭제.
   extractionStep?: string;
+  // 추출 시작 시각(ISO). 나중에 목차 재등록 때 registeredAt(=원 등록일)로 계산하면
+  // 이미 지난 시간이 커서 진행바가 즉시 90%로 튐 — 별도 타임스탬프로 갈라놓음.
+  extractionStartedAt?: string;
 }

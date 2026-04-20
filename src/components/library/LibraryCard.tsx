@@ -94,7 +94,9 @@ export default function LibraryCard({
   }, [isExtracting]);
   const extractionPct = (() => {
     if (!isExtracting) return 0;
-    const start = Date.parse(book.registeredAt);
+    // 목차 재등록은 registeredAt 이 과거라 progress 가 즉시 100% 로 튀는 이슈 —
+    // extractionStartedAt 이 있으면 그걸 기준으로, 없으면 최초 등록 시각(registeredAt) 사용.
+    const start = Date.parse(book.extractionStartedAt ?? book.registeredAt);
     if (isNaN(start)) return 0;
     const elapsed = Date.now() - start;
     const pct = Math.min(90, Math.round((elapsed / EXTRACTION_ETA_MS) * 90));

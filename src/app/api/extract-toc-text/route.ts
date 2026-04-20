@@ -88,6 +88,9 @@ export async function POST(req: NextRequest) {
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0.1,
+      // 큰 목차(10+ 파트, 수십 섹션) 는 JSON 출력이 7~12KB 까지 나옴.
+      // 기본 한도(~8192) 로 잘려 "Unterminated string" 파싱 실패가 났었음 (시작의 기술 케이스).
+      maxOutputTokens: 16384,
     },
   };
 

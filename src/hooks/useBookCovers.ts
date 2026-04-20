@@ -15,6 +15,8 @@ export function useBookCovers(books: Book[]): Record<number, string> {
 
     books.forEach((book, idx) => {
       const q = book.searchQuery;
+      // 분석 중 shell 책은 searchQuery 가 비어있을 수 있음 — 400 방지용 스킵.
+      if (!q || q.trim().length === 0) return;
       (async () => {
         try {
           const cached = await getCached(q);

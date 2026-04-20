@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 // T-37: Gemini Vision 으로 책 목차 이미지를 파트/섹션 JSON 으로 변환.
 // 프롬프트는 지시서 고정. 사용자 입력 없이 고정값 → 프롬프트 인젝션 위험 낮음.
 
-const PROMPT = `너는 책 목차 이미지에서 구조를 추출하는 OCR/구조화 도구다.
-다음 이미지는 한국어 책의 목차 페이지다.
-규칙:
-1) "파트" / "Part" / "제1부" / "1부" 단위를 parts[].title 로 추출. 없으면 전체를 parts[0]로 묶어라.
-2) "장" / "챕터" / "Chapter" 단위를 해당 파트의 sections[] 로 추출.
-3) 각 항목의 페이지 번호를 startPage/endPage 에 넣어라. endPage 는 다음 항목의 startPage - 1.
-4) 마지막 항목의 endPage 는 마지막으로 보이는 페이지 번호 또는 totalPages.
-5) 확신도 0~1 을 confidence 에 반환. 페이지 번호를 하나도 읽지 못하면 0.
-오직 아래 JSON 스키마만 응답하라. 설명·코드블록 금지.
+// 엄격한 스키마 강제 → Flash 가 내용 놓침. Pro 로 바꾸고 프롬프트도 풀어서
+// 모델이 자연스럽게 구조 뽑게 하고, 후처리로 우리 스키마에 맞춘다.
+const PROMPT = `이 이미지들은 한국어 책의 목차 페이지다.
+모든 파트/장/섹션 제목과 페이지 번호를 정확히 읽어서 JSON 으로 정리하라.
+- 상위 단위(부·파트·Part·나침반N·챕터N 등)는 parts[] 에,
+  그 아래 세부 항목(장·절·소제목)은 해당 파트의 sections[] 에 넣는다.
+- 상위 단위가 없으면 전체를 parts[0] 하나로 묶는다.
+- 각 항목의 시작 페이지는 startPage, endPage 는 다음 항목의 startPage - 1.
+  마지막 항목은 본인 startPage 와 같게 둬도 된다(서버가 보정).
+- 페이지 번호를 하나도 못 읽으면 confidence 를 0 으로.
+오직 JSON 만 응답. 설명·코드블록 금지.
 {
   "parts": [
     { "index": 1, "title": "...", "startPage": 1, "endPage": 52,
@@ -83,7 +85,10 @@ export async function POST(req: NextRequest) {
   };
 
   // 키는 쿼리스트링 대신 헤더로 — 서버 액세스로그/프록시 캐시에 키가 남지 않게.
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+  // Pro 필수 — Flash 는 목차를 "본인이 자연스럽다 싶은 단어" 로 환각 보정.
+  // 실측: "별이 없는 밤, 부의 방향" → "빛이 없는 밤, 빛의 방향" 식으로 절반 오역.
+  // 비용 10배지만 한 권 3~5원 수준이라 감수할 만함.
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent`;
 
   let r: Response;
   try {

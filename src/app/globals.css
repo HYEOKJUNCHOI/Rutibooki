@@ -59,3 +59,32 @@ html, body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+
+/* 인풋 포커스 — 기본 outline 은 PhoneFrame overflow:hidden 에 잘려서 하얀 띠로 보임.
+   outline 제거 + inset box-shadow + 매트릭스 톤 border 로 교체. 모든 인풋/텍스트에리어 일괄 적용. */
+input, textarea, select {
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--matrix-dim) !important;
+  box-shadow: inset 0 0 0 1px var(--matrix-dim);
+}
+/* iOS Safari 숫자/텍스트 인풋의 내부 그림자 제거 — 위의 스타일과 충돌 방지. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* 서재 카드 "분석 중" 표시용 펄스/블링크. */
+@keyframes rbk-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+@keyframes rbk-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}

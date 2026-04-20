@@ -5,6 +5,7 @@ import { BookPart } from "@/types/book";
 import type { AladinBook } from "@/types/aladin";
 import type { SlotStatus } from "@/components/register/RegisterSlot";
 import { postProcessParts } from "@/utils/postProcessParts";
+import { parseAladinToc } from "@/utils/parseAladinToc";
 
 // T-35: /register 상태 머신. 표지/목차 업로드, Vision 호출, Naver 표지 검색.
 
@@ -280,8 +281,9 @@ export function useRegisterFlow() {
 
   // 표지 이미지 → Gemini Vision → 제목/저자 자동 채움.
   // title 이 바뀌면 기존 effect 가 네이버 표지 자동 검색을 트리거한다.
+  // 반환값: 알라딘 목차까지 성공적으로 주입됐으면 true — 상위 흐름에서 Gemini TOC 스킵 판단용.
   const extractCoverFromImage = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<{ aladinTocLoaded: boolean }> => {
       // 1) 업로드된 파일 자체는 cover 슬롯에 먼저 넣는다 (사용자 피드백용).
       const previewUrl = track(URL.createObjectURL(file));
       setState((s) => ({
@@ -306,7 +308,7 @@ export function useRegisterFlow() {
           coverStatus: "done",
           cover: s.cover ? { ...s.cover, status: "done" } : null,
         }));
-        return;
+        return { aladinTocLoaded: false };
       }
 
       // 3) API 호출.
@@ -343,12 +345,13 @@ export function useRegisterFlow() {
           publisher: extractedPublisher || s.publisher,
         }));
 
-        // 4) 알라딘 백그라운드 보강 — 표지에서 제목을 못 뽑았으면 스킵.
-        // 메인 OCR 흐름은 이미 완료된 상태라 이건 "있으면 좋은" 보너스.
-        // 실패해도 사용자에겐 안 알린다 (사진 OCR 결과만으로도 등록 가능).
+        // 4) 알라딘 보강 — 제목+저자+출판사 교정, ISBN 확보, 목차까지 시도.
+        // await 해서 상위(handleExtractAll)가 Gemini TOC 를 돌릴지 말지 확정할 수 있게.
+        let aladinTocLoaded = false;
         if (extractedTitle) {
-          enrichWithAladin(extractedTitle, setState);
+          aladinTocLoaded = await enrichWithAladin(extractedTitle, setState);
         }
+        return { aladinTocLoaded };
       } catch (e) {
         setState((s) => ({
           ...s,
@@ -357,6 +360,7 @@ export function useRegisterFlow() {
           coverStatus: "done",
           cover: s.cover ? { ...s.cover, status: "done" } : null,
         }));
+        return { aladinTocLoaded: false };
       }
     },
     [track],
@@ -456,13 +460,13 @@ function wait(ms: number) {
 async function enrichWithAladin(
   query: string,
   setState: React.Dispatch<React.SetStateAction<RegisterFlowState>>,
-) {
+): Promise<boolean> {
   try {
     const r = await fetch(`/api/search-book?q=${encodeURIComponent(query)}`);
-    if (!r.ok) return;
+    if (!r.ok) return false;
     const data = await r.json();
     const top: AladinBook | undefined = data.items?.[0];
-    if (!top) return;
+    if (!top) return false;
 
     setState((s) => ({
       ...s,
@@ -474,7 +478,57 @@ async function enrichWithAladin(
       naverCoverUrl: s.cover ? s.naverCoverUrl : top.cover || s.naverCoverUrl,
       aladinMatch: top,
     }));
+
+    // 매칭됐으니 바로 알라딘 목차 조회 — 성공하면 Gemini Vision 안 돌려도 됨.
+    // 실패/빈 결과면 false 반환해서 상위에서 사진 OCR 흐름으로 회귀.
+    if (top.isbn13) {
+      return await fetchAladinToc(top.isbn13, top.itemPage || 0, setState);
+    }
+    return false;
   } catch {
     // 네트워크 실패는 조용히 — 보강은 보너스, 필수 흐름이 아니다.
+    return false;
+  }
+}
+
+// 알라딘 ItemLookUp 목차 조회 → 파싱 → tocResult 주입.
+// 이게 성공하면 사용자는 "불러오기" 눌러도 Gemini 호출 없이 즉시 저장 가능.
+async function fetchAladinToc(
+  isbn: string,
+  fallbackPages: number,
+  setState: React.Dispatch<React.SetStateAction<RegisterFlowState>>,
+): Promise<boolean> {
+  try {
+    const r = await fetch(`/api/fetch-toc?isbn=${encodeURIComponent(isbn)}`);
+    if (!r.ok) return false;
+    const data = await r.json();
+    const html = typeof data.toc === "string" ? data.toc : "";
+    if (!html) return false;
+
+    const { parts, lastPage } = parseAladinToc(html);
+    if (parts.length === 0) return false;
+
+    const totalPages =
+      (typeof data.itemPage === "number" && data.itemPage > 0
+        ? data.itemPage
+        : fallbackPages) || lastPage;
+
+    setState((s) => {
+      // 사용자가 이미 사진 OCR 로 목차를 뽑아둔 경우엔 덮지 않음.
+      if (s.tocResult && s.tocResult.parts.length > 0) return s;
+      return {
+        ...s,
+        tocResult: {
+          parts,
+          totalPages,
+          confidence: 0.95,
+          warning: undefined,
+        },
+      };
+    });
+    return true;
+  } catch {
+    // 목차 조회 실패는 조용히 — 사진 OCR fallback 이 대기 중.
+    return false;
   }
 }

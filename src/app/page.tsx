@@ -51,9 +51,10 @@ export default function LibraryHome() {
 
   // 커버는 전체 기준으로 미리 계산 — 필터 전환 시 재요청 피함.
   const covers = useBookCovers(sortedBooks);
+  // book.coverUrl(알라딘) 이 있으면 우선 사용. 없을 때만 네이버 API 캐시 폴백.
   const coverById = useMemo(() => {
     const map = new Map<string, string | undefined>();
-    sortedBooks.forEach((b, i) => map.set(b.id, covers[i]));
+    sortedBooks.forEach((b, i) => map.set(b.id, b.coverUrl || covers[i]));
     return map;
   }, [sortedBooks, covers]);
 

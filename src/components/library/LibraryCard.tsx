@@ -75,6 +75,9 @@ export default function LibraryCard({
     startXYRef.current = null;
   };
 
+  const isExtracting = book.status === "extracting";
+  const isFailed = book.status === "failed";
+
   const handleClick = (e: React.MouseEvent) => {
     if (firedRef.current) {
       // 길게누르기가 이미 발화 — 클릭 이벤트 무시.
@@ -82,6 +85,8 @@ export default function LibraryCard({
       firedRef.current = false;
       return;
     }
+    // 분석 중인 책은 상세로 들어가도 볼 게 없음 — 탭 무효.
+    if (isExtracting) return;
     onClick();
   };
 
@@ -146,8 +151,73 @@ export default function LibraryCard({
         </div>
       )}
 
+      {/* 분석 중 — 표지·제목은 드러나는 대로 보이게 두고, 좌상단 점+배지로만 알림.
+          보더에 미세한 초록 펄스 — "아직 돌고 있어요" 신호. */}
+      {isExtracting && (
+        <>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              border: "1px solid rgba(0,255,122,0.5)",
+              borderRadius: 5,
+              animation: "rbk-pulse 1.6s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 4,
+              left: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+              background: "rgba(0,0,0,0.65)",
+              color: "#00FF7A",
+              fontSize: 7,
+              fontWeight: 700,
+              padding: "2px 5px",
+              borderRadius: 4,
+              letterSpacing: "-0.2px",
+              backdropFilter: "blur(2px)",
+            }}
+          >
+            <span
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                background: "#00FF7A",
+                animation: "rbk-blink 1s ease-in-out infinite",
+              }}
+            />
+            목차 중
+          </div>
+        </>
+      )}
+
+      {/* 실패 뱃지 — 우상단. 길게눌러서 삭제·재등록 유도. */}
+      {isFailed && (
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            background: "rgba(255,80,80,0.85)",
+            color: "#fff",
+            fontSize: 7,
+            fontWeight: 800,
+            padding: "1px 4px",
+            borderRadius: 4,
+          }}
+        >
+          실패
+        </div>
+      )}
+
       {/* 상단 중앙 뱃지 (넘패드 8) — 진행률. 0%/100% 에서는 숨김. */}
-      {progress > 0 && progress < 100 && (
+      {!isExtracting && progress > 0 && progress < 100 && (
         <div
           style={{
             position: "absolute",

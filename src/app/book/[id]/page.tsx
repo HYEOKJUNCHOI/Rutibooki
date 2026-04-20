@@ -82,6 +82,57 @@ export default function BookDetailPage({
     );
   }
 
+  // 백그라운드 등록 중 — parts/totalPages 가 아직 비어서 FullJourney/TodayCard 가 깨짐.
+  // 사용자에게 "분석 중" placeholder 만 보여주고 끝난 뒤 새로고침 유도.
+  if (selectedBook.status === "extracting") {
+    return (
+      <main
+        style={{ background: "#050505", minHeight: "100vh" }}
+        className="flex flex-col items-center justify-center px-6 py-12"
+      >
+        <PhoneFrame>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              color: "#5A5A5A",
+              fontSize: 13,
+              lineHeight: 1.8,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ color: "#00FF7A", fontWeight: 700 }}>
+              책을 분석하고 있어요
+            </div>
+            잠시 뒤 목차가 채워져요.
+            <br />
+            서재로 돌아가서 기다려주세요.
+            <button
+              onClick={() => router.push("/")}
+              style={{
+                marginTop: 20,
+                background: "#111",
+                color: "#E8E8E8",
+                border: "1px solid #2A2A2A",
+                borderRadius: 10,
+                padding: "10px 16px",
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              서재로
+            </button>
+          </div>
+        </PhoneFrame>
+      </main>
+    );
+  }
+
   const handleOpenBook = () => {
     router.push(`/read?bookId=${selectedBook.id}`);
   };
@@ -172,7 +223,7 @@ export default function BookDetailPage({
         <FullJourney
           book={selectedBook}
           currentPage={currentPage}
-          coverUrl={covers[0] ?? null}
+          coverUrl={selectedBook.coverUrl || covers[0] || null}
         />
 
         <TodayCard book={selectedBook} />

@@ -9,6 +9,7 @@ import { useNickname } from "@/hooks/useNickname";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
 import BookActionSheet from "@/components/library/BookActionSheet";
+import TocUploadModal from "@/components/library/TocUploadModal";
 import BarcodeScanner from "@/components/register/BarcodeScanner";
 import { Book } from "@/types/book";
 import { normalizeAuthor } from "@/utils/normalizeAuthor";
@@ -38,6 +39,8 @@ export default function LibraryHome() {
   // 바코드 재스캔 모드 — 이 값이 set 되면 스캐너 오버레이 뜨고, 인식되면 해당 책 메타만 갱신.
   const [rescanBook, setRescanBook] = useState<Book | null>(null);
   const [rescanBusy, setRescanBusy] = useState(false);
+  // 목차 업로드 모달 — 3장까지 선택받아 기존 책 parts 덮어쓰기.
+  const [tocUploadBook, setTocUploadBook] = useState<Book | null>(null);
   const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
   // 서재 = 등록된 책 그대로.
@@ -224,13 +227,24 @@ export default function LibraryHome() {
           setSheetBook(null);
           setRescanBook(b);
         }}
-        onUpdateToc={async (b, files) => {
+        onUpdateTocOpen={(b) => {
           setSheetBook(null);
-          // 백그라운드 추출 — 카드에 '목차 정리중' extractionStep 이 떠서 진행 상태는 카드에서 확인 가능.
-          const ok = await updateTocForExistingBook(b.id, files);
-          if (!ok) alert("목차 추출 실패 — 사진을 다시 확인해주세요");
+          setTocUploadBook(b);
         }}
       />
+
+      {tocUploadBook && (
+        <TocUploadModal
+          book={tocUploadBook}
+          onClose={() => setTocUploadBook(null)}
+          onConfirm={async (files) => {
+            const target = tocUploadBook;
+            setTocUploadBook(null);
+            const ok = await updateTocForExistingBook(target.id, files);
+            if (!ok) alert("목차 추출 실패 — 사진을 다시 확인해주세요");
+          }}
+        />
+      )}
 
       {rescanBook && (
         <BarcodeScanner

@@ -88,7 +88,15 @@ export default function BookCoverSwipe({
 
   return (
     <div
-      style={{ position: "relative", height: 220, marginBottom: 20, userSelect: "none" }}
+      style={{
+        position: "relative",
+        height: 220,
+        marginBottom: 20,
+        userSelect: "none",
+        // iOS 사파리 길게누름 네이티브 메뉴(이미지 저장/공유) 차단 — 우리 long-press 제스처만 남김.
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
+      }}
       onMouseDown={(e) => onDragStart(e.clientX)}
       onMouseMove={(e) => onDragMove(e.clientX)}
       onMouseUp={onDragEnd}
@@ -97,6 +105,7 @@ export default function BookCoverSwipe({
       onTouchMove={(e) => onDragMove(e.touches[0].clientX)}
       onTouchEnd={onDragEnd}
       onClick={handleClick}
+      onContextMenu={(e) => e.preventDefault()}
     >
       {/* 책 뒤 초록 글로우 — 중앙이 가장 진하고 가장자리로 퍼지며 투명 */}
       <div
@@ -129,7 +138,8 @@ export default function BookCoverSwipe({
             <img
               src={covers[prevIdx]}
               alt=""
-              style={{ height: "80%", objectFit: "contain", borderRadius: 6, filter: "blur(1px)" }}
+              draggable={false}
+              style={{ height: "80%", objectFit: "contain", borderRadius: 6, filter: "blur(1px)", WebkitTouchCallout: "none", pointerEvents: "none" }}
             />
           )}
         </div>
@@ -154,7 +164,8 @@ export default function BookCoverSwipe({
             <img
               src={covers[nextIdx]}
               alt=""
-              style={{ height: "80%", objectFit: "contain", borderRadius: 6, filter: "blur(1px)" }}
+              draggable={false}
+              style={{ height: "80%", objectFit: "contain", borderRadius: 6, filter: "blur(1px)", WebkitTouchCallout: "none", pointerEvents: "none" }}
             />
           )}
         </div>
@@ -198,12 +209,14 @@ export default function BookCoverSwipe({
               <img
                 src={covers[selectedIdx]}
                 alt={selectedBook.title}
+                draggable={false}
                 style={{
                   height: "100%",
                   objectFit: "contain",
                   borderRadius: 6,
                   boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
                   pointerEvents: "none",
+                  WebkitTouchCallout: "none",
                 }}
               />
             ) : (

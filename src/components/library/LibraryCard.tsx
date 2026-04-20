@@ -284,7 +284,8 @@ export default function LibraryCard({
         </div>
       )}
 
-      {/* 상단 중앙 뱃지 (넘패드 8) — 진행률. 0%/100% 에서는 숨김. */}
+      {/* 상단 중앙 뱃지 (넘패드 8) — 진행률. 0%/100% 에서는 숨김.
+          흰색은 밝은 표지에서 안 보여서 브랜드 그린으로 — 시인성 + 일관성. */}
       {!isExtracting && progress > 0 && progress < 100 && (
         <div
           style={{
@@ -293,9 +294,9 @@ export default function LibraryCard({
             left: "50%",
             transform: "translateX(-50%)",
             fontSize: 8,
-            fontWeight: 700,
-            color: "#E8E8E8",
-            background: "rgba(0,0,0,0.55)",
+            fontWeight: 800,
+            color: "#00FF7A",
+            background: "rgba(0,0,0,0.7)",
             padding: "1px 5px",
             borderRadius: 6,
             letterSpacing: "-0.3px",
@@ -303,6 +304,33 @@ export default function LibraryCard({
           }}
         >
           {progress}%
+        </div>
+      )}
+
+      {/* 장르 배지 — 좌상단(넘패드 7). Gemini 추론값 있을 때만. */}
+      {!isExtracting && book.genre && (
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            left: 4,
+            fontSize: 7,
+            fontWeight: 700,
+            color: "#9AE0B9",
+            background: "rgba(0,0,0,0.6)",
+            border: "1px solid rgba(0,255,122,0.25)",
+            padding: "1px 4px",
+            borderRadius: 4,
+            letterSpacing: "-0.2px",
+            lineHeight: 1.2,
+            maxWidth: 50,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          {book.genre}
         </div>
       )}
 

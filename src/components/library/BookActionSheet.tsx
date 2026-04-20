@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Book } from "@/types/book";
 
 // 서재 카드 길게눌러 뜨는 액션 시트.
@@ -10,9 +10,8 @@ interface Props {
   book: Book | null;
   onClose: () => void;
   onDelete: (book: Book) => Promise<void> | void;
-  // 목차 사진 업로드 → 기존 책의 parts/totalPages 덮어쓰기.
-  // 바코드만으로 등록한 책(단일 파트 폴백)의 FullJourney 를 나중에 풍성하게 만들고 싶을 때.
-  onUpdateToc?: (book: Book, files: File[]) => void;
+  // 목차 3장 업로드 모달 열기 — 실제 확정은 부모에서 처리.
+  onUpdateTocOpen?: (book: Book) => void;
   // 바코드 재스캔으로 메타만 덮어쓰기 — 목차 보존.
   onRescanBarcode?: (book: Book) => void;
 }
@@ -21,10 +20,9 @@ export default function BookActionSheet({
   book,
   onClose,
   onDelete,
-  onUpdateToc,
+  onUpdateTocOpen,
   onRescanBarcode,
 }: Props) {
-  const tocInputRef = useRef<HTMLInputElement | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -125,30 +123,16 @@ export default function BookActionSheet({
           )}
         </div>
 
-        {onUpdateToc && (
-          <>
-            <SheetButton
-              label={
-                book.parts && book.parts.length > 1
-                  ? "목차 다시 등록"
-                  : "목차 등록"
-              }
-              sub="사진 업로드"
-              onClick={() => tocInputRef.current?.click()}
-            />
-            <input
-              ref={tocInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []).slice(0, 3);
-                e.target.value = "";
-                if (files.length > 0) onUpdateToc(book, files);
-              }}
-            />
-          </>
+        {onUpdateTocOpen && (
+          <SheetButton
+            label={
+              book.parts && book.parts.length > 1
+                ? "목차 다시 등록"
+                : "목차 등록"
+            }
+            sub="사진 3장까지"
+            onClick={() => onUpdateTocOpen(book)}
+          />
         )}
         {onRescanBarcode && (
           <SheetButton

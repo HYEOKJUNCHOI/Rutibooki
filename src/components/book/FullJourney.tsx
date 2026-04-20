@@ -30,8 +30,8 @@ const COVER_H = 74;
 const COVER_Y = 0; // 커버 상단 y.
 const COVER_BOTTOM_Y = COVER_Y + COVER_H;
 const RAIL_START_Y = COVER_BOTTOM_Y + 4; // 커버 바로 아래에서 레일 시작.
-const PART_ROW_H = 56; // 파트 행 기본 높이.
-const CURRENT_EXTRA = 24; // 현재 파트 섹션 스트립 공간.
+const PART_ROW_H = 72; // 파트 행 기본 높이. 긴 제목 2줄 줄바꿈 수용.
+const CURRENT_EXTRA = 26; // 현재 파트 섹션 스트립 공간.
 const GOAL_GAP = 34; // 마지막 파트 → 완독 여백.
 
 export default function FullJourney({
@@ -102,25 +102,14 @@ export default function FullJourney({
         overflow: "hidden",
       }}
     >
-      {/* 매거진 헤드라인 */}
+      {/* 진행률만 우측 상단에 얇게 — JOURNEY 캡션은 버스 노선 감성에 불필요해 제거. */}
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginBottom: 12,
+          justifyContent: "flex-end",
+          marginBottom: 10,
         }}
       >
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 700,
-            color: "#7A7A7A",
-            letterSpacing: 2.4,
-          }}
-        >
-          JOURNEY
-        </span>
         <span
           style={{
             fontSize: 20,
@@ -504,9 +493,14 @@ function PartRow({
               fontWeight: isCurrent ? 700 : 500,
               color: isCurrent ? "#E8E8E8" : isPast ? "#9A9A9A" : "#5A5A5A",
               letterSpacing: "-0.3px",
-              whiteSpace: "nowrap",
+              // 긴 제목은 2줄까지 줄바꿈 — 잘리는 대신 읽히도록.
+              whiteSpace: "normal",
+              lineHeight: 1.3,
+              wordBreak: "keep-all",
               overflow: "hidden",
-              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
               flex: 1,
               minWidth: 0,
             }}

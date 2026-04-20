@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 
-// BarcodeDetector 로 EAN-13 스캔 — ISBN-13 은 EAN-13 의 부분집합(978/979 접두).
-// iOS Safari 17+, Chrome/Edge 최근 버전 지원. 미지원 브라우저는 바로 에러 안내.
+// 바코드 스캐너 — 네이티브 BarcodeDetector 우선, 미지원(iOS Safari) 이면 ZXing 폴백.
+// EAN-13 만 허용. ISBN-13 은 978/979 접두의 EAN-13.
 // 카메라 접근 실패 / 거절 시 onClose 호출해 상위에서 사진 경로로 유도.
 
 interface DetectedBarcode {
@@ -22,32 +24,42 @@ interface Props {
   onClose: () => void;
 }
 
+// ISBN-13 구조 — 978/979 접두 + 10자리.
+const ISBN13_RE = /^(978|979)\d{10}$/;
+
 export default function BarcodeScanner({ onDetect, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
+  const zxingRef = useRef<BrowserMultiFormatReader | null>(null);
   const firedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState("바코드를 사각형 안에 맞춰주세요");
 
   useEffect(() => {
-    // 지원 여부 확인 — 미지원이면 즉시 안내.
-    const Detector = (
-      window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }
-    ).BarcodeDetector;
-    if (!Detector) {
-      setError(
-        "이 브라우저에서는 바코드 스캔이 안 됩니다. 사진으로 등록해주세요.",
-      );
-      return;
-    }
-
-    const detector = new Detector({ formats: ["ean_13"] });
     let cancelled = false;
 
+    const fire = (raw: string) => {
+      if (firedRef.current) return;
+      const isbn = raw.replace(/\D/g, "");
+      if (!ISBN13_RE.test(isbn)) return; // ISBN 이 아니면 무시 (상품 바코드 등).
+      firedRef.current = true;
+      setHint(`감지됨: ${isbn}`);
+      if ("vibrate" in navigator) {
+        try {
+          navigator.vibrate(30);
+        } catch {
+          /* no-op */
+        }
+      }
+      onDetect(isbn);
+    };
+
     (async () => {
+      // 카메라 스트림 먼저 확보 — 두 경로(Native/ZXing) 공통.
+      let stream: MediaStream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 1280 },
@@ -55,52 +67,71 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
           },
           audio: false,
         });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play();
+      } catch (e) {
+        setError(
+          (e as Error).name === "NotAllowedError"
+            ? "카메라 권한이 거부됐습니다"
+            : "카메라를 열 수 없습니다",
+        );
+        return;
+      }
+      if (cancelled) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      streamRef.current = stream;
 
+      const video = videoRef.current;
+      if (!video) return;
+      video.srcObject = stream;
+      // iOS Safari 는 playsInline 없으면 전체화면 강제.
+      video.setAttribute("playsinline", "true");
+      try {
+        await video.play();
+      } catch {
+        // 자동재생 실패해도 화면은 뜸 — 사용자 탭 후 재시도.
+      }
+
+      // 경로 A: 네이티브 BarcodeDetector (안드로이드 Chrome 등)
+      const Native = (
+        window as unknown as {
+          BarcodeDetector?: BarcodeDetectorConstructor;
+        }
+      ).BarcodeDetector;
+      if (Native) {
+        const detector = new Native({ formats: ["ean_13"] });
         const loop = async () => {
           if (cancelled || firedRef.current) return;
           try {
             const results = await detector.detect(video);
-            const hit = results.find(
-              (b) =>
-                b.format === "ean_13" &&
-                /^(978|979)\d{10}$/.test(b.rawValue.replace(/\D/g, "")),
-            );
+            const hit = results.find((b) => b.format === "ean_13");
             if (hit) {
-              firedRef.current = true;
-              const isbn = hit.rawValue.replace(/\D/g, "");
-              setHint(`감지됨: ${isbn}`);
-              // 햅틱 피드백.
-              if ("vibrate" in navigator) {
-                try {
-                  navigator.vibrate(30);
-                } catch {
-                  /* no-op */
-                }
-              }
-              onDetect(isbn);
+              fire(hit.rawValue);
               return;
             }
           } catch {
-            // detect 실패는 프레임 단위라 조용히 무시, 다음 프레임 재시도.
+            /* frame 단위 실패 무시 */
           }
           rafRef.current = window.requestAnimationFrame(loop);
         };
         rafRef.current = window.requestAnimationFrame(loop);
+        return;
+      }
+
+      // 경로 B: ZXing 폴백 (iOS Safari 등)
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      const reader = new BrowserMultiFormatReader(hints);
+      zxingRef.current = reader;
+      try {
+        await reader.decodeFromVideoElement(video, (result) => {
+          if (cancelled || firedRef.current) return;
+          if (result) fire(result.getText());
+        });
       } catch (e) {
         setError(
-          (e as Error).message === "Permission denied" ||
-            (e as Error).name === "NotAllowedError"
-            ? "카메라 권한이 거부됐습니다"
-            : "카메라를 열 수 없습니다",
+          `바코드 디코더 초기화 실패: ${(e as Error).message || "unknown"}`,
         );
       }
     })();
@@ -108,6 +139,8 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
     return () => {
       cancelled = true;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      // ZXing v0.1.x 는 reset 대신 stopContinuousDecode 가 없고, GC 대상임.
+      zxingRef.current = null;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
@@ -184,7 +217,6 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
                 objectFit: "cover",
               }}
             />
-            {/* 가이드 박스 — 중앙 가로 긴 영역(바코드는 가로로 길다) */}
             <div
               style={{
                 position: "absolute",

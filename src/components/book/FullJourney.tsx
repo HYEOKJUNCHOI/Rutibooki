@@ -99,38 +99,8 @@ export default function FullJourney({
         overflow: "hidden",
       }}
     >
-      {/* 진행률 — 카드 상단 우측. START 커버 옆 여백을 활용. */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          marginBottom: 6,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 20,
-            fontWeight: 300,
-            color: "#E8E8E8",
-            letterSpacing: "-0.8px",
-            lineHeight: 1,
-          }}
-        >
-          {overall}
-          <span
-            style={{
-              fontSize: 10,
-              color: "#5A5A5A",
-              marginLeft: 2,
-              fontWeight: 500,
-            }}
-          >
-            %
-          </span>
-        </span>
-      </div>
-
-      {/* 여정 캔버스 — SVG 배경 + 절대 배치된 커버/노드/라벨 */}
+      {/* 여정 캔버스 — SVG 배경 + 절대 배치된 커버/노드/라벨.
+          진행률(%)은 캔버스 내부에서 START/제목 두 줄과 같은 열 높이에 우측 정렬. */}
       <div
         style={{
           position: "relative",
@@ -196,6 +166,43 @@ export default function FullJourney({
           )}
         </svg>
 
+        {/* 진행률 — START + 제목 두 줄 묶음의 우측 끝에 세로 중앙 정렬.
+            색은 진행 중임을 강조하는 브랜드 그린. */}
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: COVER_Y + 4,
+            height: 38, // START(라벨) + 제목 한 줄 대략 합 — 두 줄 가운데 정렬 기준.
+            display: "flex",
+            alignItems: "center",
+            paddingRight: 4,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 32,
+              fontWeight: 400,
+              color: "#00FF7A",
+              letterSpacing: "-0.8px",
+              lineHeight: 1,
+              textShadow: "0 0 10px rgba(0,255,122,0.35)",
+            }}
+          >
+            {overall}
+            <span
+              style={{
+                fontSize: 13,
+                color: "#00B858",
+                marginLeft: 2,
+                fontWeight: 500,
+              }}
+            >
+              %
+            </span>
+          </span>
+        </div>
+
         {/* 커버 + 메타 블록 */}
         <div
           style={{
@@ -241,14 +248,15 @@ export default function FullJourney({
           )}
         </div>
 
-        {/* 커버 우측 — 책 메타(START 라벨 + 제목 + 저자/출판사) */}
+        {/* 커버 우측 — 책 메타(START 라벨 + 제목 + 저자/출판사).
+            우측 % 와 겹치지 않도록 paddingRight 확보. */}
         <div
           style={{
             position: "absolute",
             left: `${(LABEL_X / SVG_W) * 100}%`,
             top: COVER_Y + 4,
             right: 0,
-            paddingRight: 4,
+            paddingRight: 72,
           }}
         >
           <div

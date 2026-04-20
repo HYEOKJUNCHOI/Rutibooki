@@ -301,7 +301,7 @@ export default function FullJourney({
           >
             {formatShortDate(book.registeredAt)} 부터
           </div>
-          {/* 메인 제목 + (있으면) 아랫줄에 부제. "밤과 나침반 - 목표는 크게, 실행은 작게" 같은 합체 타이틀 대응. */}
+          {/* 메인 제목 + 부제(1줄 ellipsis). 커버(74px) 높이 안에 메타 다 들어가도록 컴팩트하게. */}
           {(() => {
             const { main, sub } = splitTitle(book.title);
             return (
@@ -312,12 +312,12 @@ export default function FullJourney({
                     fontWeight: 700,
                     color: "#E8E8E8",
                     letterSpacing: "-0.3px",
-                    lineHeight: 1.25,
-                    marginBottom: sub ? 1 : 3,
+                    lineHeight: 1.2,
+                    marginBottom: sub ? 1 : 2,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     display: "-webkit-box",
-                    WebkitLineClamp: 2,
+                    WebkitLineClamp: sub ? 1 : 2,
                     WebkitBoxOrient: "vertical",
                   }}
                 >
@@ -326,17 +326,15 @@ export default function FullJourney({
                 {sub && (
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: 500,
-                      color: "#9A9A9A",
+                      color: "#8A8A8A",
                       letterSpacing: "-0.2px",
-                      lineHeight: 1.3,
-                      marginBottom: 3,
+                      lineHeight: 1.2,
+                      marginBottom: 2,
+                      whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
                     }}
                   >
                     {sub}
@@ -345,37 +343,47 @@ export default function FullJourney({
               </>
             );
           })()}
+          {/* 저자 · 카테고리 칩 — 한 줄 안에 인라인으로 붙여서 높이 추가 방지. */}
           <div
             style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               fontSize: 10,
               color: "#7A7A7A",
               letterSpacing: "-0.2px",
               whiteSpace: "nowrap",
               overflow: "hidden",
-              textOverflow: "ellipsis",
             }}
           >
-            {book.author}
-          </div>
-          {/* 알라딘 분류 리프 — 인지심리학 / 자기계발 / 소설 같은 작은 칩. */}
-          {book.category && (
-            <div
+            <span
               style={{
-                marginTop: 6,
-                display: "inline-block",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 9,
-                fontWeight: 600,
-                color: "#B8D4FF",
-                background: "rgba(90,140,220,0.12)",
-                border: "1px solid rgba(90,140,220,0.35)",
-                letterSpacing: "-0.1px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                minWidth: 0,
               }}
             >
-              {book.category}
-            </div>
-          )}
+              {book.author}
+            </span>
+            {book.category && (
+              <span
+                style={{
+                  flexShrink: 0,
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  fontSize: 8,
+                  fontWeight: 600,
+                  color: "#B8D4FF",
+                  background: "rgba(90,140,220,0.12)",
+                  border: "1px solid rgba(90,140,220,0.35)",
+                  letterSpacing: "-0.1px",
+                  lineHeight: 1.3,
+                }}
+              >
+                {book.category}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 파트 노드 + 라벨 */}

@@ -390,7 +390,7 @@ export default function FullJourney({
               : "0 0 0 3px rgba(58,58,58,0.18), 0 2px 4px rgba(0,0,0,0.6)",
             animation:
               !isFinished && !book.goalDate
-                ? "fj-goal-blink 1.2s ease-in-out infinite"
+                ? "fj-goal-blink 1.7s ease-in-out infinite"
                 : undefined,
             display: "flex",
             alignItems: "center",

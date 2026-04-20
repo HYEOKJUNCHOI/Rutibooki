@@ -2,7 +2,6 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
 import { formatDateShort, getDayLabel } from "@/utils/reading";
@@ -34,9 +33,8 @@ export default function BookDetailPage({
   const hydrated = useBooksStore((s) => s.hydrated);
 
   const registered = useBooksStore((s) => s.registered);
-  // 사용자 등록 책 우선, 없으면 목업에서 찾는다.
-  const allBooks = [...registered, ...mockBooks];
-  const selectedBook = allBooks.find((b) => b.id === id);
+  // 더미 데이터 제거 후 — 등록 책에서만 조회.
+  const selectedBook = registered.find((b) => b.id === id);
   // FullJourney 현재 위치 표기용 — 훅은 조건부 호출 불가라 id 없을 땐 빈문자열로.
   const bookState = useBookState(selectedBook?.id ?? "");
   const currentPage = bookState?.currentPage ?? 0;
@@ -46,7 +44,6 @@ export default function BookDetailPage({
     paramId: id,
     hydrated,
     registeredIds: registered.map((b) => b.id),
-    mockIds: mockBooks.map((b) => b.id),
     selectedBookId: selectedBook?.id ?? null,
     selectedBookTitle: selectedBook?.title ?? null,
     partsLen: selectedBook?.parts?.length ?? null,

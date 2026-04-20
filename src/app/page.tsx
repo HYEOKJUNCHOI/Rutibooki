@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { books as mockBooks } from "@/data/books";
 import { useBooksStore } from "@/store/booksStore";
 import { useReadingStore } from "@/store/readingStore";
 import { useBookCovers } from "@/hooks/useBookCovers";
@@ -30,15 +29,12 @@ export default function LibraryHome() {
   const removeBook = useBooksStore((s) => s.removeBook);
   const statesByBook = useReadingStore((s) => s.statesByBook);
 
-  // 길게눌러 뜨는 액션 시트 — 목업 책은 삭제/편집 불가(스토어에 없음).
+  // 길게눌러 뜨는 액션 시트.
   const [sheetBook, setSheetBook] = useState<Book | null>(null);
   const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
-  // 사용자 등록 책 + 목업 병합. 동일 id 충돌 시 등록본 우선.
-  const books = useMemo(() => {
-    const seen = new Set(registered.map((b) => b.id));
-    return [...registered, ...mockBooks.filter((b) => !seen.has(b.id))];
-  }, [registered]);
+  // 서재 = 등록된 책 그대로.
+  const books = useMemo(() => registered, [registered]);
 
   // 최근 읽은 순 정렬 — 미열람은 뒤로.
   const sortedBooks = useMemo(() => {

@@ -354,13 +354,24 @@ async function callExtractToc(
 
   // Stage 2: 구조화
   try {
+    console.log("[bg-register] extract-toc-text call");
     const r = await fetch("/api/extract-toc-text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: ocrText }),
     });
-    if (!r.ok) return null;
+    console.log("[bg-register] extract-toc-text status", r.status);
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      console.warn("[bg-register] extract-toc-text !ok", r.status, body.slice(0, 300));
+      return null;
+    }
     const data = await r.json();
+    console.log("[bg-register] extract-toc-text ok", {
+      hasError: !!data.error,
+      partsLen: data.parts?.length ?? 0,
+      totalPages: data.totalPages,
+    });
     if (data.error) return null;
     const rawParts = (data.parts ?? []) as BookPart[];
     const { parts } = postProcessParts(
@@ -371,8 +382,13 @@ async function callExtractToc(
     if (parts.length > 0 && totalPages > 0) {
       return { parts, totalPages };
     }
+    console.warn("[bg-register] extract-toc-text empty parts/pages", {
+      parts: parts.length,
+      totalPages,
+    });
     return null;
-  } catch {
+  } catch (e) {
+    console.warn("[bg-register] extract-toc-text throw", e);
     return null;
   }
 }

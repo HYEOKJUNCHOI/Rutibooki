@@ -366,7 +366,8 @@ export default function FullJourney({
           );
         })}
 
-        {/* 완독 — 종점. 도로 끝의 마지막 정류장. */}
+        {/* 완독 — 종점. 도로 끝의 마지막 정류장.
+            goalDate 미설정 상태면 노란색으로 깜빡여서 "날짜 탭해주세요" 어필. */}
         <div
           style={{
             position: "absolute",
@@ -376,11 +377,21 @@ export default function FullJourney({
             width: 18,
             height: 18,
             borderRadius: "50%",
-            background: isFinished ? "#00FF7A" : "#0D0D0D",
-            border: `2px solid ${isFinished ? "#00FF7A" : "#3A3A3A"}`,
+            background: isFinished
+              ? "#00FF7A"
+              : !book.goalDate
+                ? "#FFD400"
+                : "#0D0D0D",
+            border: `2px solid ${
+              isFinished ? "#00FF7A" : !book.goalDate ? "#FFD400" : "#3A3A3A"
+            }`,
             boxShadow: isFinished
               ? "0 0 0 4px rgba(0,255,122,0.2), 0 0 14px rgba(0,255,122,0.65)"
               : "0 0 0 3px rgba(58,58,58,0.18), 0 2px 4px rgba(0,0,0,0.6)",
+            animation:
+              !isFinished && !book.goalDate
+                ? "fj-goal-blink 1.2s ease-in-out infinite"
+                : undefined,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -391,7 +402,11 @@ export default function FullJourney({
               width: 5,
               height: 5,
               borderRadius: "50%",
-              background: isFinished ? "#000" : "#3A3A3A",
+              background: isFinished
+                ? "#000"
+                : !book.goalDate
+                  ? "#000"
+                  : "#3A3A3A",
             }}
           />
         </div>
@@ -441,6 +456,16 @@ export default function FullJourney({
         @keyframes fj-section-pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.35); opacity: 0.7; }
+        }
+        @keyframes fj-goal-blink {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(255,212,0,0.55), 0 0 10px rgba(255,212,0,0.5);
+            opacity: 1;
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(255,212,0,0), 0 0 18px rgba(255,212,0,0.9);
+            opacity: 0.55;
+          }
         }
       `}</style>
     </div>

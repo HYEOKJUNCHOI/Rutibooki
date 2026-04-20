@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { ReadingState, ReadingLog, QuoteEntry } from "@/types/reading";
 import { updatePaceEMA } from "@/utils/pace";
-import { books as initialBooks } from "@/data/books";
-import { Book } from "@/types/book";
 import { getActivePart, getActiveSection } from "@/utils/reading";
 import { auth } from "@/lib/firebase";
 import * as readingRepo from "@/lib/firestore/readingRepo";
@@ -53,30 +51,10 @@ function currentUid(): string | null {
   return auth.currentUser?.uid ?? null;
 }
 
-// 등록된 책들에 대해 기본 ReadingState를 만들어 둔다 — 목업 포함 초기 진입 대응.
-// [MOCKUP] 서재 뱃지 시각 검증용 — 진행 중 상태가 한 화면에 보이도록 분배.
-// Firestore 가 채워지면 자동으로 덮어써짐 — 실사용에는 영향 없음.
-const MOCK_STATE_OVERRIDES: Record<string, { pageRatio?: number }> = {
-  primitive: { pageRatio: 0.37 },      // 37% — 진행 중
-  immutable: { pageRatio: 0.72 },       // 72% — 진행 중
-  "money-equation": { pageRatio: 0.58 }, // 진행 중
-};
-
+// 더미 데이터 제거 후 — initialBooks 는 빈 배열. 초기 시딩 없이 hydrate 만 기다림.
+// 함수는 호출부 호환을 위해 유지. 등록된 책의 ReadingState 는 getState 의 fallback 으로 lazy 생성.
 function makeInitialStates(): Record<string, ReadingState> {
-  const out: Record<string, ReadingState> = {};
-  const now = new Date().toISOString();
-  for (const b of initialBooks as Book[]) {
-    const override = MOCK_STATE_OVERRIDES[b.id] ?? {};
-    const ratio = override.pageRatio ?? 0;
-    out[b.id] = {
-      bookId: b.id,
-      currentPage: Math.round(b.totalPages * ratio),
-      activePartIndex: 1,
-      activeSectionIndex: 0,
-      lastOpenedAt: now,
-    };
-  }
-  return out;
+  return {};
 }
 
 export const useReadingStore = create<ReadingStore>()((set, get) => ({
@@ -120,11 +98,8 @@ export const useReadingStore = create<ReadingStore>()((set, get) => ({
     set((state) => {
       const prev = state.statesByBook[bookId];
       if (!prev) return state;
-      // [Critical C-2] 등록 책도 책 정보를 찾을 수 있어야 함. 이전엔 목업만 봐서
-      // 사용자 등록 책의 activePartIndex/Sec 가 절대 갱신되지 않았음.
-      const book =
-        initialBooks.find((b) => b.id === bookId) ??
-        useBooksStore.getState().getById(bookId);
+      // 등록 책은 booksStore 에서 조회 — 더미 데이터 제거 후 단일 소스.
+      const book = useBooksStore.getState().getById(bookId);
       let activePartIndex = prev.activePartIndex;
       let activeSectionIndex = prev.activeSectionIndex;
       if (book) {

@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { books as mockBooks } from "@/data/books";
 import { Book } from "@/types/book";
 import { useBooksStore } from "@/store/booksStore";
 import { useReadingStore } from "@/store/readingStore";
@@ -43,11 +42,10 @@ function ReadPageInner() {
   // Firestore pull 이 AuthProvider 에서 수행되므로 rehydrate 불필요.
   const hydrated = true;
 
-  // 사용자 등록 책 + 목업 목록을 병합. 등록 책 우선.
-  // [Critical C-1] 이전엔 mockBooks 만 검색해서 등록 책 "책 펼쳤어요" 시 홈으로 튕김.
+  // 더미 데이터 제거 후 — 등록 책에서만 조회.
   const registered = useBooksStore((s) => s.registered);
   const book = useMemo(
-    () => [...registered, ...mockBooks].find((b) => b.id === bookId),
+    () => registered.find((b) => b.id === bookId),
     [registered, bookId],
   );
 

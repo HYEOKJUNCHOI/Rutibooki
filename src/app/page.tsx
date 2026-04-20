@@ -154,7 +154,15 @@ export default function LibraryHome() {
                         key={book.id}
                         book={book}
                         cover={coverById.get(book.id)}
-                        onClick={() => router.push(`/book/${book.id}`)}
+                        onClick={() => {
+                          console.log("[home] open book", {
+                            id: book.id,
+                            title: book.title,
+                            href: `/book/${book.id}`,
+                            encoded: `/book/${encodeURIComponent(book.id)}`,
+                          });
+                          router.push(`/book/${book.id}`);
+                        }}
                         onLongPress={
                           isRegistered(book.id)
                             ? (b) => setSheetBook(b)

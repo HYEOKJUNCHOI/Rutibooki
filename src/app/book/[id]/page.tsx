@@ -41,9 +41,29 @@ export default function BookDetailPage({
   const bookState = useBookState(selectedBook?.id ?? "");
   const currentPage = bookState?.currentPage ?? 0;
 
+  // [디버그] 어디서 막히는지 추적 — 해결되면 제거.
+  console.log("[book/[id]] render", {
+    paramId: id,
+    hydrated,
+    registeredIds: registered.map((b) => b.id),
+    mockIds: mockBooks.map((b) => b.id),
+    selectedBookId: selectedBook?.id ?? null,
+    selectedBookTitle: selectedBook?.title ?? null,
+    partsLen: selectedBook?.parts?.length ?? null,
+    totalPages: selectedBook?.totalPages ?? null,
+  });
+
   useEffect(() => {
-    if (hydrated && !selectedBook) router.replace("/");
-  }, [hydrated, selectedBook, router]);
+    if (hydrated && !selectedBook) {
+      console.warn("[book/[id]] redirect → /", {
+        paramId: id,
+        hydrated,
+        registeredCount: registered.length,
+        registeredIds: registered.map((b) => b.id),
+      });
+      router.replace("/");
+    }
+  }, [hydrated, selectedBook, router, id, registered]);
 
   // 표지 로딩은 선택된 책 1권만 대상. BookCoverSwipe가 배열을 받으므로 1개짜리로 감싸 넘김.
   const coverBooks = selectedBook ? [selectedBook] : [];

@@ -299,13 +299,11 @@ async function callExtractToc(
   files: File[],
   aladinTotal: number,
 ): Promise<ExtractTocResult | null> {
-  // 2-stage 파이프라인:
-  //   1) /api/ocr-vision  — Cloud Vision 으로 순수 텍스트만 뽑음 (호출당 flat rate).
-  //   2) /api/extract-toc-text — 추출된 텍스트를 Gemini 텍스트-전용 모드로 구조화.
-  // Cloud Vision 은 해상도에 따른 가격 증가 없음 → 1400px 까지 올려 OCR 정확도 우선.
-  // 흑백+대비 부스트는 유지 (OCR 엔진이 이미 전처리하지만 해치지 않음).
+  // 1-stage 멀티모달 — Gemini 2.5 Flash 에 이미지 직접 투입.
+  // 이전 [Vision → 텍스트 → Gemini 텍스트] 2단 대비: API 호출 2회 → 1회, 레이턴시·비용 양쪽 감소.
+  // 해상도는 1100px 로 낮춤 — Gemini 이미지 타일링은 768 기준이라 1400px 는 타일 수만 늘림.
   const MAX_BODY_BYTES = 3.8 * 1024 * 1024;
-  const SIZES = [1400, 1100, 900];
+  const SIZES = [1100, 900, 768];
   let resized: Blob[] = [];
   for (const edge of SIZES) {
     resized = await Promise.all(
@@ -333,46 +331,16 @@ async function callExtractToc(
     );
   });
 
-  // Stage 1: OCR
-  let ocrText: string;
   try {
-    const r = await fetch("/api/ocr-vision", { method: "POST", body: form });
-    if (!r.ok) {
-      console.warn("[bg-register] ocr-vision failed", r.status);
-      return null;
-    }
-    const data = await r.json();
-    if (data.error || typeof data.text !== "string" || !data.text) {
-      console.warn("[bg-register] ocr-vision empty", data);
-      return null;
-    }
-    ocrText = data.text;
-    console.log("[bg-register] ocr-vision ok, textLen", ocrText.length);
-  } catch (e) {
-    console.warn("[bg-register] ocr-vision fetch fail", e);
-    return null;
-  }
-
-  // Stage 2: 구조화
-  try {
-    console.log("[bg-register] extract-toc-text call");
-    const r = await fetch("/api/extract-toc-text", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: ocrText }),
-    });
-    console.log("[bg-register] extract-toc-text status", r.status);
+    console.log("[bg-register] extract-toc call (multimodal)", files.length);
+    const r = await fetch("/api/extract-toc", { method: "POST", body: form });
+    console.log("[bg-register] extract-toc status", r.status);
     if (!r.ok) {
       const body = await r.text().catch(() => "");
-      console.warn("[bg-register] extract-toc-text !ok", r.status, body.slice(0, 300));
+      console.warn("[bg-register] extract-toc !ok", r.status, body.slice(0, 300));
       return null;
     }
     const data = await r.json();
-    console.log("[bg-register] extract-toc-text ok", {
-      hasError: !!data.error,
-      partsLen: data.parts?.length ?? 0,
-      totalPages: data.totalPages,
-    });
     if (data.error) return null;
     const rawParts = (data.parts ?? []) as BookPart[];
     const { parts } = postProcessParts(
@@ -383,13 +351,13 @@ async function callExtractToc(
     if (parts.length > 0 && totalPages > 0) {
       return { parts, totalPages };
     }
-    console.warn("[bg-register] extract-toc-text empty parts/pages", {
+    console.warn("[bg-register] extract-toc empty parts/pages", {
       parts: parts.length,
       totalPages,
     });
     return null;
   } catch (e) {
-    console.warn("[bg-register] extract-toc-text throw", e);
+    console.warn("[bg-register] extract-toc throw", e);
     return null;
   }
 }

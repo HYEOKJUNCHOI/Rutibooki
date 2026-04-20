@@ -40,4 +40,6 @@ export interface Book {
   // 백그라운드 등록 파이프라인 상태. undefined = ready(모든 필드 확정), "extracting" = 아직 분석 중,
   // "failed" = 파이프라인 실패 — 서재에서 재시도 UI 노출 예정.
   status?: "extracting" | "failed";
+  // 추출 파이프라인 현재 단계 라벨. "표지" | "검색" | "목차" 등 짧게. 완료 시 삭제.
+  extractionStep?: string;
 }

@@ -1,9 +1,13 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Book } from "@/types/book";
 import { useBookState } from "@/store/selectors";
 import { calcProgress } from "@/utils/reading";
+
+// 추출 예상 시간(ms) — 이 시간 동안 0→90% 로 스멀스멀 올라감. 실제 완료 시 100% 스냅.
+// 8~15초 걸리는 파이프라인이라 12초를 타겟으로 잡음.
+const EXTRACTION_ETA_MS = 12000;
 
 // 길게누르기 임계값 — 500ms 는 OS 컨텍스트 메뉴와 충돌 가능해 조금 아래로.
 const LONG_PRESS_MS = 420;
@@ -78,6 +82,24 @@ export default function LibraryCard({
   const isExtracting = book.status === "extracting";
   const isFailed = book.status === "failed";
 
+  // 추출 중일 때만 ~300ms 간격 tick — 경과시간 기반 가짜 % 업데이트.
+  // onSnapshot 으로 status 가 사라지는 순간 interval 자동 해제.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!isExtracting) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 300);
+    return () => window.clearInterval(id);
+  }, [isExtracting]);
+  const extractionPct = (() => {
+    if (!isExtracting) return 0;
+    const start = Date.parse(book.registeredAt);
+    if (isNaN(start)) return 0;
+    const elapsed = Date.now() - start;
+    const pct = Math.min(90, Math.round((elapsed / EXTRACTION_ETA_MS) * 90));
+    return Math.max(5, pct); // 시작부터 최소 5% — 게이지 보이게.
+  })();
+  void tick;
+
   const handleClick = (e: React.MouseEvent) => {
     if (firedRef.current) {
       // 길게누르기가 이미 발화 — 클릭 이벤트 무시.
@@ -121,6 +143,7 @@ export default function LibraryCard({
       }}
     >
       {cover ? (
+        // 사용자가 막 찍은 사진(data: URL) 이면 블러 + 살짝 어둡게 — 알라딘 공식 표지 오면 자연스럽게 선명해짐.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={cover}
@@ -130,6 +153,11 @@ export default function LibraryCard({
             height: "100%",
             objectFit: "cover",
             display: "block",
+            filter: cover.startsWith("data:")
+              ? "blur(4px) brightness(0.75)"
+              : "none",
+            transform: cover.startsWith("data:") ? "scale(1.1)" : "none",
+            transition: "filter 0.4s ease, transform 0.4s ease",
           }}
         />
       ) : (
@@ -170,29 +198,67 @@ export default function LibraryCard({
               position: "absolute",
               top: 4,
               left: 4,
+              right: 4,
               display: "flex",
-              alignItems: "center",
-              gap: 3,
-              background: "rgba(0,0,0,0.65)",
+              flexDirection: "column",
+              gap: 2,
+              background: "rgba(0,0,0,0.68)",
               color: "#00FF7A",
               fontSize: 7,
               fontWeight: 700,
-              padding: "2px 5px",
+              padding: "3px 5px 4px",
               borderRadius: 4,
               letterSpacing: "-0.2px",
               backdropFilter: "blur(2px)",
             }}
           >
-            <span
+            <div
               style={{
-                width: 4,
-                height: 4,
-                borderRadius: "50%",
-                background: "#00FF7A",
-                animation: "rbk-blink 1s ease-in-out infinite",
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
               }}
-            />
-            목차 중
+            >
+              <span
+                style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: "50%",
+                  background: "#00FF7A",
+                  animation: "rbk-blink 1s ease-in-out infinite",
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {book.extractionStep ?? "준비중"}
+              </span>
+              <span style={{ opacity: 0.9 }}>{extractionPct}%</span>
+            </div>
+            {/* 미니 진행바 — 경과 시간 기반 0→90% 로 증가, 완료 시 카드 자체가 사라짐. */}
+            <div
+              style={{
+                height: 2,
+                background: "rgba(0,255,122,0.18)",
+                borderRadius: 1,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${extractionPct}%`,
+                  background: "#00FF7A",
+                  transition: "width 0.3s linear",
+                }}
+              />
+            </div>
           </div>
         </>
       )}

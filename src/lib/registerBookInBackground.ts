@@ -26,12 +26,22 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
   const { updateBook } = useBooksStore.getState();
   console.log("[bg-register] start", { shellId, tocCount: tocFiles.length });
 
+  // 단계 라벨 갱신 — UI(서재 카드) 가 현재 뭘 하고 있는지 보여주게.
+  await updateBook(shellId, { extractionStep: "표지 읽는중" });
+
   // 1) 표지 OCR → 제목/저자/장르/출판사.
   let extractedTitle = "";
   let extractedAuthor = "";
   try {
     console.log("[bg-register] cover resize start");
     const dataUrl = await fileToResizedDataUrl(coverFile, 1200);
+    // 업로드한 사진을 임시 표지로 즉시 박아넣음 — 알라딘 매칭 전까지 "일하는 중" 감.
+    // 알라딘 매칭되면 더 깨끗한 URL 로 덮어씀.
+    try {
+      await updateBook(shellId, { coverUrl: dataUrl });
+    } catch (e) {
+      console.warn("[bg-register] local cover preview set fail", e);
+    }
     console.log("[bg-register] cover resize done, calling /api/extract-cover");
     const r = await fetch("/api/extract-cover", {
       method: "POST",
@@ -64,6 +74,8 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
   } catch (e) {
     console.warn("[bg-register] cover OCR fail", e);
   }
+
+  await updateBook(shellId, { extractionStep: "책 찾는중" });
 
   // 2) 알라딘 매칭 → ISBN/표지URL/itemPage 확보.
   let aladinMatch: AladinBook | null = null;
@@ -101,6 +113,8 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
   } else {
     console.warn("[bg-register] skipping aladin — no extractedTitle");
   }
+
+  await updateBook(shellId, { extractionStep: "목차 정리중" });
 
   // 3) 목차 — 알라딘 우선, 실패 시 Gemini Vision.
   let parts: BookPart[] = [];
@@ -193,7 +207,7 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
   }
 }
 
-// status 필드를 Firestore 에서 실제로 삭제. undefined patch 는 에러라 deleteField 사용.
+// status·extractionStep 필드를 Firestore 에서 실제로 삭제. undefined patch 는 에러라 deleteField 사용.
 async function clearStatusField(shellId: string) {
   const { auth } = await import("@/lib/firebase");
   const { db } = await import("@/lib/firebase");
@@ -203,6 +217,7 @@ async function clearStatusField(shellId: string) {
   try {
     await updateDoc(doc(db, "users", uid, "books", shellId), {
       status: deleteField(),
+      extractionStep: deleteField(),
     });
     // 로컬 스토어도 동기화 — onSnapshot 도착 전 UI 즉시 반영.
     useBooksStore.setState((state) => ({
@@ -210,6 +225,7 @@ async function clearStatusField(shellId: string) {
         if (b.id !== shellId) return b;
         const clone = { ...b };
         delete clone.status;
+        delete clone.extractionStep;
         return clone;
       }),
     }));

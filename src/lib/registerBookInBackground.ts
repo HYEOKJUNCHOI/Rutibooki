@@ -22,9 +22,17 @@ interface StartArgs {
 
 export function startBackgroundRegistration(args: StartArgs) {
   // fire-and-forget — 실패는 내부에서 updateBook({ status: "failed" }) 로 마감.
-  void runPipeline(args).catch((err) => {
+  // extractionStep 까지 같이 털어야 UI 카드에 "알라딘 조회중..." 같은 라벨이 박제되지 않음.
+  void runPipeline(args).catch(async (err) => {
     console.error("[bg-register] unexpected", err);
-    useBooksStore.getState().updateBook(args.shellId, { status: "failed" });
+    try {
+      await useBooksStore
+        .getState()
+        .updateBook(args.shellId, { status: "failed" });
+      await clearExtractionStep(args.shellId);
+    } catch (e) {
+      console.warn("[bg-register] mark-failed fail", e);
+    }
   });
 }
 
@@ -97,7 +105,33 @@ async function runPipeline({
     await updateBook(shellId, { parts, totalPages });
     await clearStatusField(shellId);
   } else {
+    // totalPages 0 → 알라딘 메타 자체가 없거나 페이지 수 미상.
+    // extractionStep 도 같이 털어서 카드에 "알라딘 조회중..." 이 박제되지 않게.
     await updateBook(shellId, { status: "failed" });
+    await clearExtractionStep(shellId);
+  }
+}
+
+// extractionStep 만 Firestore 에서 삭제. failed 마감 시 라벨 제거용.
+async function clearExtractionStep(shellId: string) {
+  const { auth, db } = await import("@/lib/firebase");
+  const { doc, updateDoc, deleteField } = await import("firebase/firestore");
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  try {
+    await updateDoc(doc(db, "users", uid, "books", shellId), {
+      extractionStep: deleteField(),
+    });
+    useBooksStore.setState((state) => ({
+      registered: state.registered.map((b) => {
+        if (b.id !== shellId) return b;
+        const clone = { ...b };
+        delete clone.extractionStep;
+        return clone;
+      }),
+    }));
+  } catch (e) {
+    console.warn("[bg-register] clear extractionStep fail", e);
   }
 }
 

@@ -600,7 +600,7 @@ function PartRow({
                     flexShrink: 0,
                   }}
                 >
-                  PART {String(part.index).padStart(2, "0")}
+                  {indexLabel}
                 </span>
                 <span
                   style={{

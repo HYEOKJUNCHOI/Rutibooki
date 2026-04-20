@@ -77,17 +77,39 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
 
   await updateBook(shellId, { extractionStep: "책 찾는중" });
 
-  // 2) 알라딘 매칭 → ISBN/표지URL/itemPage 확보.
+  // 2) 책 메타 보강 — 역할 분리:
+  //    - 네이버 book-cover: 표지 URL (알라딘보다 이미지 CDN 이 안정적이고 누락 적음).
+  //    - 알라딘 search-book: ISBN / itemPage / 제목·저자·출판사 교정 (목차 fetch 전제조건).
+  //    두 API 는 독립이라 병렬로 때림.
   let aladinMatch: AladinBook | null = null;
   if (extractedTitle) {
-    try {
-      console.log("[bg-register] aladin search start", extractedTitle);
-      const r = await fetch(
-        `/api/search-book?q=${encodeURIComponent(extractedTitle)}`,
-      );
-      console.log("[bg-register] search-book status", r.status);
-      if (r.ok) {
-        const data = await r.json();
+    console.log("[bg-register] meta fetch start", extractedTitle);
+    const [naverRes, aladinRes] = await Promise.allSettled([
+      fetch(`/api/book-cover?title=${encodeURIComponent(extractedTitle)}`),
+      fetch(`/api/search-book?q=${encodeURIComponent(extractedTitle)}`),
+    ]);
+
+    const patch: Partial<Book> = {};
+
+    // 네이버 표지 — 성공하면 coverUrl 우선 적용.
+    if (naverRes.status === "fulfilled" && naverRes.value.ok) {
+      try {
+        const data = await naverRes.value.json();
+        console.log("[bg-register] naver cover", { image: !!data.image });
+        if (typeof data.image === "string" && data.image) {
+          patch.coverUrl = data.image;
+        }
+      } catch (e) {
+        console.warn("[bg-register] naver parse fail", e);
+      }
+    } else {
+      console.warn("[bg-register] naver cover unavailable", naverRes);
+    }
+
+    // 알라딘 메타 — 제목 교정 + ISBN/itemPage 확보 (목차 fetch 에 필요).
+    if (aladinRes.status === "fulfilled" && aladinRes.value.ok) {
+      try {
+        const data = await aladinRes.value.json();
         console.log("[bg-register] aladin items count", data.items?.length ?? 0);
         const top: AladinBook | undefined = data.items?.[0];
         if (top) {
@@ -97,21 +119,27 @@ async function runPipeline({ shellId, coverFile, tocFiles }: StartArgs) {
             itemPage: top.itemPage,
           });
           aladinMatch = top;
-          const patch: Partial<Book> = { title: top.title };
+          patch.title = top.title;
           if (top.author) patch.author = top.author;
           else if (extractedAuthor) patch.author = extractedAuthor;
           if (top.publisher) patch.publisher = top.publisher;
-          if (top.cover) patch.coverUrl = top.cover;
-          await updateBook(shellId, patch);
+          // 표지는 네이버 우선. 네이버가 실패했을 때만 알라딘 표지로 폴백.
+          if (!patch.coverUrl && top.cover) patch.coverUrl = top.cover;
         } else {
           console.warn("[bg-register] aladin no match for", extractedTitle);
         }
+      } catch (e) {
+        console.warn("[bg-register] aladin parse fail", e);
       }
-    } catch (e) {
-      console.warn("[bg-register] aladin search fail", e);
+    } else {
+      console.warn("[bg-register] aladin search unavailable", aladinRes);
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await updateBook(shellId, patch);
     }
   } else {
-    console.warn("[bg-register] skipping aladin — no extractedTitle");
+    console.warn("[bg-register] skipping meta — no extractedTitle");
   }
 
   await updateBook(shellId, { extractionStep: "목차 정리중" });

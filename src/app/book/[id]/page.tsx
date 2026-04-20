@@ -8,6 +8,7 @@ import { formatDateShort, getDayLabel } from "@/utils/reading";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import TodayCard from "@/components/book/TodayCard";
 import FullJourney from "@/components/book/FullJourney";
+import BookCoverSwipe from "@/components/book/BookCoverSwipe";
 import RestNudge from "@/components/book/RestNudge";
 import { useBookState } from "@/store/selectors";
 import { getNudge } from "@/data/nudges";
@@ -216,12 +217,23 @@ export default function BookDetailPage({
           </button>
         </div>
 
-        {/* 여정 카드 v3 — 커버를 레일의 시작점으로. 커버→파트→완독 연속 흐름. */}
-        <FullJourney
-          book={selectedBook}
-          currentPage={currentPage}
-          coverUrl={selectedBook.coverUrl || covers[0] || null}
-        />
+        {/* 목차 미등록(단일-파트 폴백) 책은 FullJourney 구조가 의미 없음 —
+            이전 MVP UI(BookCoverSwipe = 카드뒤집기 + 쏘카식 JourneyPath) 로 폴백.
+            목차 등록되면 자동으로 FullJourney 로 승격. */}
+        {selectedBook.parts.length > 1 ? (
+          <FullJourney
+            book={selectedBook}
+            currentPage={currentPage}
+            coverUrl={selectedBook.coverUrl || covers[0] || null}
+          />
+        ) : (
+          <BookCoverSwipe
+            books={[selectedBook]}
+            covers={covers}
+            selectedIdx={0}
+            onSelect={() => {}}
+          />
+        )}
 
         <TodayCard book={selectedBook} />
 

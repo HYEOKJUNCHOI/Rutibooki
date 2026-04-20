@@ -16,13 +16,7 @@ import {
   coverHintStyle,
   errorMsgStyle,
   extractBtnStyle,
-  kyoboHelperIconStyle,
-  kyoboHelperStyle,
-  kyoboHelperSubStyle,
-  kyoboHelperTextWrapStyle,
-  kyoboHelperTitleStyle,
   saveBtnStyle,
-  scanBtnStyle,
   sectionTitleStyle,
   slotGridStyle,
   textInputStyle,
@@ -40,7 +34,6 @@ export default function ReviewForm({ flow }: Props) {
   const router = useRouter();
   const {
     state,
-    setCover,
     clearCover,
     setTocSlot,
     clearTocSlot,
@@ -167,15 +160,6 @@ export default function ReviewForm({ flow }: Props) {
     }
   }, [state.extracting, state.tocError]);
 
-  // 표지 촬영 → Gemini Vision 숨은 인풋.
-  const coverScanInputRef = useRef<HTMLInputElement | null>(null);
-  const handleScanCoverClick = () => coverScanInputRef.current?.click();
-  const handleScanCoverPick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) extractCoverFromImage(f);
-    e.target.value = "";
-  };
-
   // 저장 조건: 표지(사용자/네이버/알라딘 어느 것이든) + 제목 + 목차 결과(파트 존재).
   // 사진 모드에선 tocResult 없이도 extractToc 가 handleSave 안에서 자동 트리거되므로
   // tocSlots 가 채워져 있으면 활성화. 검색/바코드 모드에선 tocResult 가 이미 있어야 함.
@@ -255,7 +239,8 @@ export default function ReviewForm({ flow }: Props) {
               state.cover?.previewUrl ?? state.naverCoverUrl ?? null
             }
             status={state.coverStatus}
-            onPick={setCover}
+            // 표지 슬롯에 사진이 들어오면 곧장 OCR 실행 — 별도 "찾기" 버튼 제거.
+            onPick={extractCoverFromImage}
             onClear={state.cover ? clearCover : undefined}
           />
         </div>
@@ -264,21 +249,6 @@ export default function ReviewForm({ flow }: Props) {
             검색 결과로 자동 표시 — 다른 표지를 쓰려면 탭해서 교체하세요.
           </p>
         )}
-        <input
-          ref={coverScanInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleScanCoverPick}
-          style={{ display: "none" }}
-        />
-        <button
-          type="button"
-          onClick={handleScanCoverClick}
-          disabled={state.coverExtracting}
-          style={scanBtnStyle(state.coverExtracting)}
-        >
-          {state.coverExtracting ? "표지 인식 중…" : "📸 표지 촬영으로 찾기"}
-        </button>
         {state.coverExtractError && (
           <p style={errorMsgStyle}>표지 인식 실패 — 다시 시도해 주세요.</p>
         )}
@@ -326,25 +296,6 @@ export default function ReviewForm({ flow }: Props) {
             );
           })}
         </div>
-
-        {/* 책이 수중에 없을 때 — 교보문고 미리보기로 열어 사용자가 직접 캡처해 업로드.
-            앱은 링크만 제공. 크롤링·자동화 없음 (저작권/ToS 이슈 회피). */}
-        <a
-          href={buildKyoboSearchUrl(state.title, state.author)}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={kyoboHelperStyle}
-        >
-          <span style={kyoboHelperIconStyle}>📖</span>
-          <span style={kyoboHelperTextWrapStyle}>
-            <span style={kyoboHelperTitleStyle}>
-              책이 손에 없어요?
-            </span>
-            <span style={kyoboHelperSubStyle}>
-              교보문고 미리보기에서 목차 캡처해 올리기 →
-            </span>
-          </span>
-        </a>
 
         {canExtract && (
           <button
@@ -410,13 +361,5 @@ function slugify(title: string): string {
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^\p{L}\p{N}-]/gu, "");
-}
-
-// 교보문고 검색 URL. 제목·저자가 있으면 쿼리에 꽂아주고, 아니면 빈 검색 홈.
-// 앱은 링크만 여는 역할 — 캡처·업로드는 전적으로 사용자 몫(저작권/ToS 회피).
-function buildKyoboSearchUrl(title: string, author: string): string {
-  const q = [title.trim(), author.trim()].filter(Boolean).join(" ");
-  if (!q) return "https://search.kyobobook.co.kr/search";
-  return `https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(q)}`;
 }
 

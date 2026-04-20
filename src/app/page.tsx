@@ -9,7 +9,9 @@ import { useNickname } from "@/hooks/useNickname";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
 import BookActionSheet from "@/components/library/BookActionSheet";
+import BarcodeScanner from "@/components/register/BarcodeScanner";
 import { Book } from "@/types/book";
+import { normalizeAuthor } from "@/utils/normalizeAuthor";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
@@ -27,10 +29,14 @@ export default function LibraryHome() {
 
   const registered = useBooksStore((s) => s.registered);
   const removeBook = useBooksStore((s) => s.removeBook);
+  const updateBook = useBooksStore((s) => s.updateBook);
   const statesByBook = useReadingStore((s) => s.statesByBook);
 
   // 길게눌러 뜨는 액션 시트.
   const [sheetBook, setSheetBook] = useState<Book | null>(null);
+  // 바코드 재스캔 모드 — 이 값이 set 되면 스캐너 오버레이 뜨고, 인식되면 해당 책 메타만 갱신.
+  const [rescanBook, setRescanBook] = useState<Book | null>(null);
+  const [rescanBusy, setRescanBusy] = useState(false);
   const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
   // 서재 = 등록된 책 그대로.
@@ -213,7 +219,47 @@ export default function LibraryHome() {
         onDelete={async (b) => {
           await removeBook(b.id);
         }}
+        onRescanBarcode={(b) => {
+          setSheetBook(null);
+          setRescanBook(b);
+        }}
       />
+
+      {rescanBook && (
+        <BarcodeScanner
+          onClose={() => {
+            setRescanBook(null);
+            setRescanBusy(false);
+          }}
+          onDetect={async (isbn13) => {
+            if (rescanBusy) return;
+            setRescanBusy(true);
+            try {
+              const r = await fetch(
+                `/api/fetch-toc?isbn=${encodeURIComponent(isbn13)}`,
+              );
+              if (!r.ok) throw new Error("fetch_toc_failed");
+              const data = await r.json();
+              if (data.error === "no_match" || !data.title) {
+                throw new Error("no_match");
+              }
+              // 목차(parts/totalPages) 는 건드리지 않음 — 메타만 덮어쓰기.
+              const patch: Partial<Book> = { title: data.title };
+              if (data.author) patch.author = normalizeAuthor(data.author);
+              if (data.publisher) patch.publisher = data.publisher;
+              if (data.cover) patch.coverUrl = data.cover;
+              if (data.category) patch.category = data.category;
+              await updateBook(rescanBook.id, patch);
+            } catch (e) {
+              console.warn("[rescan] fail", e);
+              alert("바코드 메타 업데이트 실패 — 다시 시도해주세요");
+            } finally {
+              setRescanBook(null);
+              setRescanBusy(false);
+            }
+          }}
+        />
+      )}
     </main>
   );
 }

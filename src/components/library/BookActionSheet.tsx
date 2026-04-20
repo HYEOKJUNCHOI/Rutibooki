@@ -11,6 +11,9 @@ interface Props {
   onClose: () => void;
   onDelete: (book: Book) => Promise<void> | void;
   onEdit?: (book: Book) => void;
+  // 바코드 재스캔으로 메타만 덮어쓰기 — 목차(parts/totalPages) 보존.
+  // 이미 목차 등록한 책의 제목/저자/표지/출판사/카테고리만 최신화하고 싶을 때.
+  onRescanBarcode?: (book: Book) => void;
 }
 
 export default function BookActionSheet({
@@ -18,6 +21,7 @@ export default function BookActionSheet({
   onClose,
   onDelete,
   onEdit,
+  onRescanBarcode,
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -125,6 +129,13 @@ export default function BookActionSheet({
           disabled={!onEdit}
           onClick={() => onEdit && onEdit(book)}
         />
+        {onRescanBarcode && (
+          <SheetButton
+            label="바코드로 메타 업데이트"
+            sub="목차 유지"
+            onClick={() => onRescanBarcode(book)}
+          />
+        )}
         <SheetButton
           label={
             deleting

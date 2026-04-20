@@ -174,7 +174,7 @@ export function useRegisterFlow() {
           publisher: data.publisher || "",
           cover: data.cover || "",
           itemPage: data.itemPage ?? 0,
-          link: "",
+          pubDate: data.pubDate || "",
         },
         isbnLookupLoading: false,
       }));

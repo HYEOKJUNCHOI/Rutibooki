@@ -131,7 +131,7 @@ async function resolveMetaByIsbn(
       publisher: data.publisher || "",
       cover: data.cover || "",
       itemPage: data.itemPage ?? 0,
-      link: "",
+      pubDate: data.pubDate || "",
     };
   } catch (e) {
     console.warn("[bg-register] resolveMetaByIsbn fail", e);

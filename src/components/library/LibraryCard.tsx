@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Book } from "@/types/book";
 import { useBookState } from "@/store/selectors";
 import { calcProgress } from "@/utils/reading";
+import { splitTitle } from "@/utils/title";
 
 // 추출 예상 시간(ms) — 이 시간 동안 0→90% 로 스멀스멀 올라감. 실제 완료 시 100% 스냅.
 // 표지→검색→목차 합쳐 22~28초. 22초를 타겟으로 잡아 진행바가 90% 에 오래 멈추는 현상 완화.
@@ -304,7 +305,7 @@ export default function LibraryCard({
         </div>
       )}
 
-      {/* 제목 띠지 — 하단 가로. */}
+      {/* 제목 띠지 — 하단 가로. 부제는 서재에선 숨기고 메인만. 2줄까지 wrap. */}
       <div
         style={{
           position: "absolute",
@@ -318,14 +319,17 @@ export default function LibraryCard({
           fontSize: 8,
           fontWeight: 700,
           letterSpacing: "-0.2px",
-          whiteSpace: "nowrap",
+          lineHeight: 1.2,
+          wordBreak: "keep-all",
           overflow: "hidden",
-          textOverflow: "ellipsis",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
           textShadow: "0 1px 2px rgba(0,0,0,0.9)",
           textAlign: "left",
         }}
       >
-        {book.title}
+        {splitTitle(book.title).main}
       </div>
     </button>
   );

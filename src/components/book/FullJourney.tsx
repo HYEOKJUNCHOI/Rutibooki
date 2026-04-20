@@ -7,6 +7,7 @@
 import { Book, BookPart } from "@/types/book";
 import { calcProgress, getActivePart, getActiveSection } from "@/utils/reading";
 import { useBooksStore } from "@/store/booksStore";
+import { splitTitle } from "@/utils/title";
 
 // 여정 카드 v5 — 버스 노선 스타일.
 // - 레일 = "도로": 두꺼운 어두운 스트로크 + 중앙 차선 점선으로 레이어링.
@@ -300,23 +301,50 @@ export default function FullJourney({
           >
             {formatShortDate(book.registeredAt)} 부터
           </div>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#E8E8E8",
-              letterSpacing: "-0.3px",
-              lineHeight: 1.25,
-              marginBottom: 3,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-            }}
-          >
-            {book.title}
-          </div>
+          {/* 메인 제목 + (있으면) 아랫줄에 부제. "밤과 나침반 - 목표는 크게, 실행은 작게" 같은 합체 타이틀 대응. */}
+          {(() => {
+            const { main, sub } = splitTitle(book.title);
+            return (
+              <>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "#E8E8E8",
+                    letterSpacing: "-0.3px",
+                    lineHeight: 1.25,
+                    marginBottom: sub ? 1 : 3,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {main}
+                </div>
+                {sub && (
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 500,
+                      color: "#9A9A9A",
+                      letterSpacing: "-0.2px",
+                      lineHeight: 1.3,
+                      marginBottom: 3,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                  >
+                    {sub}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div
             style={{
               fontSize: 10,

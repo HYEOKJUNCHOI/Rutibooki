@@ -42,6 +42,8 @@ export interface Book {
   category?: string;
   // 출판사 — FullJourney 시작 노드의 보조 메타. extract-cover 에서 같이 추출됨.
   publisher?: string;
+  // ISBN-13 — 바코드 경로로 등록된 책에만 있음. 목차 재조회(교보 스크래핑)에 사용.
+  isbn13?: string;
   // 백그라운드 등록 파이프라인 상태. undefined = ready(모든 필드 확정), "extracting" = 아직 분석 중,
   // "failed" = 파이프라인 실패 — 서재에서 재시도 UI 노출 예정.
   status?: "extracting" | "failed";

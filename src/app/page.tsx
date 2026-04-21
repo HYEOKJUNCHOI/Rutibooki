@@ -237,11 +237,16 @@ export default function LibraryHome() {
         <TocUploadModal
           book={tocUploadBook}
           onClose={() => setTocUploadBook(null)}
-          onConfirm={async (files) => {
+          onConfirm={async () => {
+            // [2026-04-22] 사진 업로드 경로 폐기. ISBN 기반 교보 재시도만 남김.
             const target = tocUploadBook;
             setTocUploadBook(null);
-            const ok = await updateTocForExistingBook(target.id, files);
-            if (!ok) alert("목차 추출 실패 — 사진을 다시 확인해주세요");
+            if (!target.isbn13) {
+              alert("이 책은 ISBN 이 없어 목차를 다시 가져올 수 없습니다");
+              return;
+            }
+            const ok = await updateTocForExistingBook(target.id, target.isbn13);
+            if (!ok) alert("교보에 목차가 없어요 — 다른 책으로 시도하거나 나중에 다시 시도해주세요");
           }}
         />
       )}

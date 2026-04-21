@@ -30,19 +30,8 @@ export function useBookCovers(books: Book[]): Record<number, string> {
           console.warn("[useBookCovers] cache lookup fail", err);
         }
 
-        try {
-          const r = await fetch(
-            `/api/book-cover?title=${encodeURIComponent(q)}`,
-          );
-          const d = await r.json();
-          if (d.image && !cancelled) {
-            setCovers((prev) => ({ ...prev, [idx]: d.image }));
-          }
-          // null 이어도 캐시에 박아둬서 반복 호출 방지.
-          await setCached(q, d.image ?? null);
-        } catch (err) {
-          console.warn("[useBookCovers] fetch fail", err);
-        }
+        // [2026-04-22] 네이버 book-cover 폴백 제거. 바코드 경로는 알라딘이 coverUrl 직접 제공.
+        // 캐시 미스 시엔 그냥 표지 없음 상태로 둔다 — Book.coverUrl 을 컴포넌트에서 우선 사용.
       })();
     });
 

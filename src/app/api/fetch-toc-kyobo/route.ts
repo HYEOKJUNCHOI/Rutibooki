@@ -10,14 +10,37 @@ import { NextRequest, NextResponse } from "next/server";
 export const maxDuration = 15;
 
 // User-Agent 는 일반 크롬. CloudFront 가 UA·Accept-Language 없으면 200 빈 응답 반환.
-const BROWSER_HEADERS = {
+// 상품페이지(product.kyobobook.co.kr)는 Vercel AWS IP 에 더 엄격 — sec-fetch-* 와
+// 검색에서 받은 Set-Cookie 를 Cookie 로 재전송해야 CloudFront 봇탐지 우회됨.
+const BASE_BROWSER_HEADERS: Record<string, string> = {
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-  Referer: "https://search.kyobobook.co.kr/",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "max-age=0",
+  "Sec-Ch-Ua": '"Chromium";v="120", "Not(A:Brand";v="24", "Google Chrome";v="120"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"Windows"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "same-site",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
 };
+
+// Set-Cookie 헤더들을 하나의 Cookie 문자열로 합침.
+function extractCookies(setCookieHeader: string | null): string {
+  if (!setCookieHeader) return "";
+  // 여러 Set-Cookie 가 콤마로 이어올 때도 있고, 각 쿠키는 "name=value; Path=...; ..." 형식.
+  // 각 덩어리에서 첫 "name=value" 만 뽑아서 "; " 로 합친다.
+  return setCookieHeader
+    .split(/,(?=\s*[A-Za-z0-9_\-]+=)/)
+    .map((c) => c.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
 
 interface Body {
   isbn13: string;
@@ -49,19 +72,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "isbn_required" }, { status: 400 });
   }
 
-  // 1단계: ISBN 검색 → 상품코드 추출.
+  // 1단계: ISBN 검색 → 상품코드 추출 + 세션 쿠키 확보.
   const searchUrl = `https://search.kyobobook.co.kr/search?keyword=${encodeURIComponent(
     body.isbn13,
   )}&gbCode=TOT&target=total`;
   let productCode: string | null = null;
+  let sessionCookie = "";
   try {
-    const r = await fetch(searchUrl, { headers: BROWSER_HEADERS });
+    const r = await fetch(searchUrl, {
+      headers: {
+        ...BASE_BROWSER_HEADERS,
+        "Sec-Fetch-Site": "none",
+        Referer: "https://www.kyobobook.co.kr/",
+      },
+    });
     if (!r.ok) {
       return NextResponse.json(
         { error: "kyobo_search_failed", status: r.status },
         { status: 502 },
       );
     }
+    sessionCookie = extractCookies(r.headers.get("set-cookie"));
     const html = await r.text();
     const m = html.match(/product\.kyobobook\.co\.kr\/detail\/([A-Z0-9]+)/);
     if (m) productCode = m[1];
@@ -71,25 +102,21 @@ export async function POST(req: NextRequest) {
   }
   if (!productCode) {
     console.log("[fetch-toc-kyobo] no product for ISBN", body.isbn13);
-    // 디버그: Vercel IP 가 CloudFront 에 차단되는지 판별용. HTML 일부 반환.
-    // 원인 좁히면 제거.
-    const searchHtml = await (await fetch(searchUrl, { headers: BROWSER_HEADERS })).text();
-    return NextResponse.json({
-      unknown: true,
-      parts: [],
-      debug: {
-        searchHtmlLength: searchHtml.length,
-        searchHtmlHead: searchHtml.slice(0, 500),
-        hasProductLink: /product\.kyobobook\.co\.kr/.test(searchHtml),
-      },
-    });
+    return NextResponse.json({ unknown: true, parts: [] });
   }
 
-  // 2단계: 상품페이지 HTML 받아오기.
+  // 2단계: 상품페이지 HTML 받아오기. 검색에서 받은 세션 쿠키 + 검색 URL Referer 필수.
+  // CloudFront 봇탐지: 쿠키 없으면 0-byte 응답으로 조용히 차단함.
   const productUrl = `https://product.kyobobook.co.kr/detail/${productCode}`;
   let productHtml = "";
   try {
-    const r = await fetch(productUrl, { headers: BROWSER_HEADERS });
+    const productHeaders: Record<string, string> = {
+      ...BASE_BROWSER_HEADERS,
+      "Sec-Fetch-Site": "same-site",
+      Referer: searchUrl,
+    };
+    if (sessionCookie) productHeaders.Cookie = sessionCookie;
+    const r = await fetch(productUrl, { headers: productHeaders });
     if (!r.ok) {
       return NextResponse.json(
         { error: "kyobo_product_failed", status: r.status },

@@ -64,28 +64,14 @@ async function runPipeline({
     console.warn("[bg-register] no isbn13 nor coverFile — nothing to anchor");
   }
 
+  await updateBook(shellId, { extractionStep: "목차 정리중" });
+
+  // 목차 — 사용자가 사진 올렸으면 Vision 2-stage. 안 올렸으면 바로 단일-파트 폴백.
+  // 알라딘 TOC HTML 은 실측상 0% 제공률이라 완전히 스킵.
   let parts: BookPart[] = [];
   let totalPages = aladinMeta?.itemPage ?? 0;
 
-  // [실험 브랜치] 바코드 경로 전용 — Gemini 2.5 Pro 텍스트 질의.
-  // 사진 OCR 은 호출하지 않음. Pro 가 모르면 그대로 실패 처리 (폴백 없음).
-  // 목적: Pro 가 한국어 출판 책 목차를 얼마나 정확히 기억하는지 실측.
-  if (isbn13 && aladinMeta && tocFiles.length === 0) {
-    await updateBook(shellId, { extractionStep: "Pro 에게 목차 물어보는중" });
-    try {
-      const result = await callFetchTocFromMetadata(aladinMeta, isbn13);
-      if (result) {
-        parts = result.parts;
-        if (!totalPages) totalPages = result.totalPages;
-      } else {
-        console.warn("[bg-register] pro meta query null — no photo fallback (experiment)");
-      }
-    } catch (e) {
-      console.warn("[bg-register] pro meta query fail", e);
-    }
-  } else if (tocFiles.length > 0) {
-    // 기존 사진 경로 — 실험 브랜치에서도 표지 사진 플로우(=coverFile) 를 위해 유지.
-    await updateBook(shellId, { extractionStep: "목차 정리중" });
+  if (tocFiles.length > 0) {
     try {
       console.log("[bg-register] vision toc", tocFiles.length, "files");
       const result = await callExtractToc(tocFiles, totalPages);
@@ -100,52 +86,29 @@ async function runPipeline({
     }
   }
 
+  // 최종 폴백 — 목차 없지만 itemPage 있으면 "본문 1..N" 단일 파트로 저장.
+  if (parts.length === 0 && totalPages > 0) {
+    console.log("[bg-register] single-part fallback");
+    parts = [
+      {
+        index: 1,
+        title: aladinMeta?.title || "본문",
+        startPage: 1,
+        endPage: totalPages,
+        sections: [{ title: "본문", startPage: 1, endPage: totalPages }],
+      },
+    ];
+  }
+
   console.log("[bg-register] finalize", { parts: parts.length, totalPages });
   if (parts.length > 0 && totalPages > 0) {
     await updateBook(shellId, { parts, totalPages });
     await clearStatusField(shellId);
   } else {
-    // 실험 브랜치: 단일-파트 폴백 제거. Pro 모름 → 실패 그대로 표시.
+    // totalPages 0 → 알라딘 메타 자체가 없거나 페이지 수 미상.
+    // extractionStep 도 같이 털어서 카드에 "알라딘 조회중..." 이 박제되지 않게.
     await updateBook(shellId, { status: "failed" });
     await clearExtractionStep(shellId);
-  }
-}
-
-// [실험] Pro 텍스트 질의 — 메타데이터만 던져서 목차 복원 요청.
-// null 리턴 = Pro 가 모른다고 자백. 폴백 없이 실패 처리.
-async function callFetchTocFromMetadata(
-  meta: AladinBook,
-  isbn13: string,
-): Promise<ExtractTocResult | null> {
-  try {
-    const r = await fetch("/api/fetch-toc-from-metadata", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        isbn13,
-        title: meta.title,
-        author: meta.author,
-        publisher: meta.publisher,
-        pubDate: meta.pubDate,
-        totalPages: meta.itemPage,
-      }),
-    });
-    if (!r.ok) {
-      console.warn("[bg-register] meta-query !ok", r.status);
-      return null;
-    }
-    const data = await r.json();
-    if (data.error || data.unknown) return null;
-    const rawParts = (data.parts ?? []) as BookPart[];
-    const { parts } = postProcessParts(rawParts, meta.itemPage || data.totalPages);
-    const totalPages = meta.itemPage || data.totalPages || 0;
-    if (parts.length > 0 && totalPages > 0) {
-      return { parts, totalPages };
-    }
-    return null;
-  } catch (e) {
-    console.warn("[bg-register] meta-query throw", e);
-    return null;
   }
 }
 

@@ -44,12 +44,22 @@ export async function GET(req: NextRequest) {
     // 이전 "packing" 소문자 버전은 itemPage 가 종종 0 으로 리턴되던 원인.
     `&OptResult=Toc,Packing`;
 
+  // 알라딘 서버가 이따금 응답을 질질 끌거나 아예 안 주는 경우가 있어 — 8초 컷.
+  // 타임아웃 없으면 클라이언트 카드가 "알라딘 조회중 90%" 에 무기한 박제됨.
   let r: Response;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    r = await fetch(url, { cache: "no-store" });
+    r = await fetch(url, { cache: "no-store", signal: ctrl.signal });
   } catch (err) {
-    console.error("[fetch-toc] network fail", err);
-    return NextResponse.json({ toc: "", error: "network_failed" });
+    const aborted = (err as Error)?.name === "AbortError";
+    console.error("[fetch-toc] network fail", aborted ? "timeout" : err);
+    return NextResponse.json({
+      toc: "",
+      error: aborted ? "timeout" : "network_failed",
+    });
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!r.ok) {

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Gemini 호출 — Vercel 기본 10초 컷 방지용 확장(현재 1-stage 로 이 경로는 비활성이지만 방어).
+export const maxDuration = 60;
+
 // OCR 으로 추출된 raw 텍스트를 받아 Gemini Flash (텍스트-전용 모드) 로 parts/sections 구조화.
 // 왜 분리했냐: 이미지 토큰은 해상도 기반으로 비쌈. Cloud Vision 이 OCR 전담하고
 // 여기선 텍스트 토큰만 다루므로 입력 비용이 1/10 수준. 구조화 정확도는 Vision 한 방 대비 동등 이상.

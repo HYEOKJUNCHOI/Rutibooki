@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Gemini 2.5 Flash 가 이미지 3장 + 16k 출력이면 20~40초 소요 — Vercel 기본 10초 컷에 걸려
+// 함수가 중도 종료되면 클라이언트 카드가 "목차 정리중" 에 박제. Hobby 플랜 상한 60초로 확장.
+export const maxDuration = 60;
+
 // T-37: Gemini Vision 으로 책 목차 이미지를 파트/섹션 JSON 으로 변환.
 // 프롬프트는 지시서 고정. 사용자 입력 없이 고정값 → 프롬프트 인젝션 위험 낮음.
 

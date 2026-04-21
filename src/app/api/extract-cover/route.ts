@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Gemini Vision 호출이라 Vercel 기본 10초로는 마진이 좁음 — Hobby 상한 60초로 확장.
+export const maxDuration = 60;
+
 // T-37b: Gemini Vision 으로 책 표지 이미지에서 메타데이터 추출.
 // 목차 추출과 달리 단일 이미지 + base64 data URL 을 JSON body 로 받는다
 // (클라이언트에서 카메라로 찍은 한 장을 바로 전송하는 흐름에 맞춤).

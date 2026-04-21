@@ -67,21 +67,21 @@ async function runPipeline({
   let parts: BookPart[] = [];
   let totalPages = aladinMeta?.itemPage ?? 0;
 
-  // [실험 브랜치] 바코드 경로 전용 — Gemini 2.5 Pro 텍스트 질의.
-  // 사진 OCR 은 호출하지 않음. Pro 가 모르면 그대로 실패 처리 (폴백 없음).
-  // 목적: Pro 가 한국어 출판 책 목차를 얼마나 정확히 기억하는지 실측.
+  // [실험 브랜치 2차] 바코드 경로 전용 — 네이버 HyperCLOVA X 텍스트 질의.
+  // 1차 (Gemini Pro) 는 원서 목차 번역 창작 확인 → 기각. CLOVA 가 한국 번역본 목차를 아는지 실측.
+  // 사진 OCR 은 호출하지 않음. 모르면 그대로 실패 처리 (폴백 없음).
   if (isbn13 && aladinMeta && tocFiles.length === 0) {
-    await updateBook(shellId, { extractionStep: "Pro 에게 목차 물어보는중" });
+    await updateBook(shellId, { extractionStep: "CLOVA 에게 목차 물어보는중" });
     try {
-      const result = await callFetchTocFromMetadata(aladinMeta, isbn13);
+      const result = await callFetchTocFromClova(aladinMeta, isbn13);
       if (result) {
         parts = result.parts;
         if (!totalPages) totalPages = result.totalPages;
       } else {
-        console.warn("[bg-register] pro meta query null — no photo fallback (experiment)");
+        console.warn("[bg-register] clova meta query null — no photo fallback (experiment)");
       }
     } catch (e) {
-      console.warn("[bg-register] pro meta query fail", e);
+      console.warn("[bg-register] clova meta query fail", e);
     }
   } else if (tocFiles.length > 0) {
     // 기존 사진 경로 — 실험 브랜치에서도 표지 사진 플로우(=coverFile) 를 위해 유지.
@@ -111,14 +111,14 @@ async function runPipeline({
   }
 }
 
-// [실험] Pro 텍스트 질의 — 메타데이터만 던져서 목차 복원 요청.
-// null 리턴 = Pro 가 모른다고 자백. 폴백 없이 실패 처리.
-async function callFetchTocFromMetadata(
+// [실험 2차] CLOVA 텍스트 질의 — 메타데이터만 던져서 목차 복원 요청.
+// null 리턴 = CLOVA 가 모른다고 자백. 폴백 없이 실패 처리.
+async function callFetchTocFromClova(
   meta: AladinBook,
   isbn13: string,
 ): Promise<ExtractTocResult | null> {
   try {
-    const r = await fetch("/api/fetch-toc-from-metadata", {
+    const r = await fetch("/api/fetch-toc-from-clova", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

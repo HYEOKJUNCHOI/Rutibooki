@@ -89,19 +89,14 @@ export default function ReviewForm({ flow }: Props) {
       if (state.naverCoverUrl) shell.coverUrl = state.naverCoverUrl;
       if (state.genre.trim()) shell.genre = state.genre.trim();
       if (state.publisher.trim()) shell.publisher = state.publisher.trim();
+      // 바코드 경로 — isbn13 저장해두면 서재 "목차 다시 가져오기" 에서 재활용 가능.
+      if (state.isbn13) shell.isbn13 = state.isbn13;
 
       await addBook(shell);
 
-      const tocFiles: File[] = [];
-      for (const k of TOC_SLOT_KEYS) {
-        const s = state.tocSlots[k];
-        if (s) tocFiles.push(s.file);
-      }
-
+      // [2026-04-22] 사진 TOC 업로드 경로 폐기. 바코드(ISBN) 원툴로 교보 스크래핑.
       startBackgroundRegistration({
         shellId: id,
-        coverFile,
-        tocFiles,
         isbn13: state.isbn13 ?? undefined,
       });
 

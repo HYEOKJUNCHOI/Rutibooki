@@ -71,7 +71,18 @@ export async function POST(req: NextRequest) {
   }
   if (!productCode) {
     console.log("[fetch-toc-kyobo] no product for ISBN", body.isbn13);
-    return NextResponse.json({ unknown: true, parts: [] });
+    // 디버그: Vercel IP 가 CloudFront 에 차단되는지 판별용. HTML 일부 반환.
+    // 원인 좁히면 제거.
+    const searchHtml = await (await fetch(searchUrl, { headers: BROWSER_HEADERS })).text();
+    return NextResponse.json({
+      unknown: true,
+      parts: [],
+      debug: {
+        searchHtmlLength: searchHtml.length,
+        searchHtmlHead: searchHtml.slice(0, 500),
+        hasProductLink: /product\.kyobobook\.co\.kr/.test(searchHtml),
+      },
+    });
   }
 
   // 2단계: 상품페이지 HTML 받아오기.

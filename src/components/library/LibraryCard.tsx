@@ -287,7 +287,7 @@ export default function LibraryCard({
       )}
 
       {/* 상단 중앙 뱃지 (넘패드 8) — 진행률. 0%/100% 에서는 숨김.
-          흰색은 밝은 표지에서 안 보여서 브랜드 그린으로 — 시인성 + 일관성. */}
+          배경이 충분히 진해 흰색으로도 선명 — 혁준님 지시로 흰색 환원. */}
       {!isExtracting && progress > 0 && progress < 100 && (
         <div
           style={{
@@ -297,7 +297,7 @@ export default function LibraryCard({
             transform: "translateX(-50%)",
             fontSize: 8,
             fontWeight: 800,
-            color: "#00FF7A",
+            color: "#FFFFFF",
             background: "rgba(0,0,0,0.7)",
             padding: "1px 5px",
             borderRadius: 6,

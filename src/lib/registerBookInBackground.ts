@@ -434,29 +434,55 @@ async function fileToResizedDataUrl(
   maxEdge: number,
   enhance: boolean = false,
 ): Promise<string> {
-  if (typeof document === "undefined" || typeof Image === "undefined") {
+  if (typeof document === "undefined") {
     return fileToDataUrl(file);
   }
-  const originalUrl = URL.createObjectURL(file);
+  // iOS 사진은 EXIF 에 회전 정보만 박혀있고 픽셀은 가로인 경우가 많음. 그대로 Gemini 에 넣으면
+  // 한글이 옆으로 누워 OCR 실패 → 빈 parts 반환. createImageBitmap 의 imageOrientation:"from-image"
+  // 로 EXIF 회전을 픽셀 단에 적용해 항상 바로 선 이미지를 얻는다.
+  let bitmap: ImageBitmap | null = null;
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error("image_load_failed"));
-      el.src = originalUrl;
-    });
-    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    if (typeof createImageBitmap === "function") {
+      bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    }
+  } catch (e) {
+    console.warn("[resize] createImageBitmap fail — fallback to <img>", e);
+  }
+
+  // 폴백: Image 로드. 모던 브라우저는 암묵적으로 EXIF 회전 처리하지만 일부 구형 사파리는 안 함.
+  let srcWidth: number;
+  let srcHeight: number;
+  let drawable: CanvasImageSource;
+  const originalUrl = bitmap ? null : URL.createObjectURL(file);
+  try {
+    if (bitmap) {
+      srcWidth = bitmap.width;
+      srcHeight = bitmap.height;
+      drawable = bitmap;
+    } else {
+      if (typeof Image === "undefined") return fileToDataUrl(file);
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("image_load_failed"));
+        el.src = originalUrl!;
+      });
+      srcWidth = img.naturalWidth;
+      srcHeight = img.naturalHeight;
+      drawable = img;
+    }
+    const longest = Math.max(srcWidth, srcHeight);
     const needResize = longest > maxEdge;
     if (!needResize && !enhance) return await fileToDataUrl(file);
     const scale = needResize ? maxEdge / longest : 1;
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
+    const w = Math.round(srcWidth * scale);
+    const h = Math.round(srcHeight * scale);
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return await fileToDataUrl(file);
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.drawImage(drawable, 0, 0, w, h);
 
     if (enhance) {
       // 흑백 + 대비 부스트 — OCR 가독성 향상.
@@ -477,7 +503,8 @@ async function fileToResizedDataUrl(
 
     return canvas.toDataURL("image/jpeg", 0.85);
   } finally {
-    URL.revokeObjectURL(originalUrl);
+    if (originalUrl) URL.revokeObjectURL(originalUrl);
+    if (bitmap) bitmap.close();
   }
 }
 

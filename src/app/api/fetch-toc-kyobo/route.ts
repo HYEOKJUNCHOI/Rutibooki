@@ -108,7 +108,18 @@ export async function POST(req: NextRequest) {
   );
   if (!liMatch) {
     console.log("[fetch-toc-kyobo] no TOC li — maybe empty 목차 section");
-    return NextResponse.json({ unknown: true, parts: [] });
+    return NextResponse.json({
+      unknown: true,
+      parts: [],
+      debug: {
+        stage: "no_li",
+        productCode,
+        productHtmlLength: productHtml.length,
+        hasBookContentsItem: /book_contents_item/.test(productHtml),
+        hasBookContents: /book_contents/.test(productHtml),
+        productHtmlSnippet: productHtml.slice(0, 600),
+      },
+    });
   }
   // <br /> → 줄바꿈, 나머지 태그 제거.
   const tocText = liMatch[1]

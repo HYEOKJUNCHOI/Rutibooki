@@ -127,6 +127,10 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
   const SENTENCE_END = /[.!?。!?．]\s*$/;
   const MULTI_SENTENCE = /[.!?。!?．]\s+\S/;
   const BU_PATTERN = /^(제?\s*\d+\s*부)\s*[:\s]?\s*(.+)$/;
+  // [2026-04-22] 4단계 목차 — LEVEL=대파트, BUTTON=섹션, SPECIAL=프롤로그/에필로그급.
+  const LEVEL_HEADER = /^LEVEL\s+(\d+)\s*[:：]\s*(.+)$/;
+  const BUTTON_HEADER = /^BUTTON\s+(\d+)\s*[.。]\s*(.+)$/;
+  const SPECIAL_HEADER = /^(START|END|ERROR)\s*[:：]\s*(.+)$/;
   const LABEL_PATTERN = /^(출간\s*\d+주년\s*기념\s*특별\s*서문|특별\s*서문|개정판\s*서문|서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|들어가는\s*글|감사의\s*글|감사의말|추천사|추천의\s*글|주석|부록|참고문헌|찾아보기|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|독자에게|저자의\s*말|역사연대표)\s*[_:\-\s]*\s*(.*)$/;
   // [2026-04-22] 한국어 짧은 챕터 제목(예: "탓하기"·"불안") 보호 — 구분자뿐인 줄만 노이즈.
   const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]+$/;
@@ -140,13 +144,104 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
     return false;
   }
 
+  // [2026-04-22] 4단계 목차 subtitle 흡수용 — 인덱스 루프. 원본 TS 와 동일 로직.
+  function isStructuralHeader(s) {
+    return (
+      LEVEL_HEADER.test(s) ||
+      BUTTON_HEADER.test(s) ||
+      SPECIAL_HEADER.test(s) ||
+      /^\d+\.\s+/.test(s) ||
+      BU_PATTERN.test(s) ||
+      LABEL_PATTERN.test(s) ||
+      DASH_PREFIX.test(s)
+    );
+  }
+  function canAbsorbSubtitle(next) {
+    if (!next) return false;
+    const t = next.trim();
+    if (!t) return false;
+    if (NOISE_PATTERN.test(t)) return false;
+    if (isStructuralHeader(t)) return false;
+    if (QUOTE_PREFIX.test(t)) return false;
+    if (t.length > 60) return false;
+    if (SENTENCE_END.test(t)) return false;
+    return true;
+  }
+
   let index = 0;
-  for (const rawLine of lines) {
+  for (let li = 0; li < lines.length; li++) {
+    const rawLine = lines[li];
     const line = rawLine.trim();
     if (!line) continue;
 
     // 0. 노이즈 스킵 — 구분자/공백뿐인 줄만.
     if (NOISE_PATTERN.test(line)) continue;
+
+    // ── 4단계 목차 분기 (LEVEL / BUTTON / SPECIAL) ──
+    const levelMatch = line.match(LEVEL_HEADER);
+    if (levelMatch) {
+      index++;
+      const p = {
+        index,
+        label: `LEVEL ${levelMatch[1]}`,
+        title: levelMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        p.subtitle = lines[li + 1].trim();
+        li++;
+      }
+      parts.push(p);
+      continue;
+    }
+    const buttonMatch = line.match(BUTTON_HEADER);
+    if (buttonMatch) {
+      const sec = {
+        title: buttonMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        label: `BUTTON ${buttonMatch[1]}`,
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        sec.subtitle = lines[li + 1].trim();
+        li++;
+      }
+      if (parts.length > 0) {
+        parts[parts.length - 1].sections.push(sec);
+      } else {
+        index++;
+        parts.push({
+          index,
+          label: sec.label ?? "",
+          title: sec.title,
+          startPage: 0,
+          endPage: 0,
+          sections: [],
+          subtitle: sec.subtitle,
+        });
+      }
+      continue;
+    }
+    const specialMatch = line.match(SPECIAL_HEADER);
+    if (specialMatch) {
+      index++;
+      const p = {
+        index,
+        label: specialMatch[1],
+        title: specialMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        p.subtitle = lines[li + 1].trim();
+        li++;
+      }
+      parts.push(p);
+      continue;
+    }
 
     // 1. 대시 접두 — 섹션 병합.
     if (DASH_PREFIX.test(line)) {

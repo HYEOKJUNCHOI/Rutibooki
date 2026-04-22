@@ -35,6 +35,10 @@ export interface KyoboSection {
   title: string;
   startPage: number;
   endPage: number;
+  // 섹션 라벨(예: "BUTTON 14"). 4단계 목차에서만 채워짐. 2/1단계는 생략.
+  label?: string;
+  // 섹션 부제목 — 4단계 목차의 BUTTON 제목 다음 줄.
+  subtitle?: string;
 }
 export interface KyoboPart {
   index: number;
@@ -43,6 +47,8 @@ export interface KyoboPart {
   startPage: number;
   endPage: number;
   sections: KyoboSection[];
+  // 대파트 부제목 — 4단계 목차(LEVEL N) 의 제목 다음 줄.
+  subtitle?: string;
 }
 
 export interface KyoboScrapeResult {
@@ -157,6 +163,11 @@ export async function scrapeKyoboToc(
   const MULTI_SENTENCE = /[.!?。!?．]\s+\S/;
   // "제1부 인지혁명", "1부 인지혁명" 형태.
   const BU_PATTERN = /^(제?\s*\d+\s*부)\s*[:\s]?\s*(.+)$/;
+  // [2026-04-22] 4단계 목차 (완벽한 원시인 등) — LEVEL N / BUTTON N / START·END·ERROR.
+  // LEVEL = 대파트(BookPart), BUTTON = 섹션(sections[i]), SPECIAL = 프롤로그/에필로그급 대파트.
+  const LEVEL_HEADER = /^LEVEL\s+(\d+)\s*[:：]\s*(.+)$/;
+  const BUTTON_HEADER = /^BUTTON\s+(\d+)\s*[.。]\s*(.+)$/;
+  const SPECIAL_HEADER = /^(START|END|ERROR)\s*[:：]\s*(.+)$/;
   // 알려진 라벨 — 서문·프롤로그·부록 등. 라벨 뒤에 내용 붙는 경우 많음.
   const LABEL_PATTERN = /^(출간\s*\d+주년\s*기념\s*특별\s*서문|특별\s*서문|개정판\s*서문|서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|들어가는\s*글|감사의\s*글|감사의말|추천사|추천의\s*글|주석|부록|참고문헌|찾아보기|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|독자에게|저자의\s*말|역사연대표)\s*[_:\-\s]*\s*(.*)$/;
   // 진짜 노이즈만 — 구분자·공백뿐인 줄, 또는 1-2자 단독 토큰.
@@ -177,13 +188,112 @@ export async function scrapeKyoboToc(
     return false;
   }
 
+  // [2026-04-22] "다음 라인을 subtitle 로 흡수" 규칙 때문에 인덱스 루프로 전환.
+  // 흡수 조건: 다음 라인이 epigraph 아니고 LEVEL/BUTTON/SPECIAL/숫자챕터/제N부/라벨 도 아니며
+  // 60자 이하 + 마침표로 안 끝남(부제는 보통 짧고 마침표 없음).
+  // 기존 2단계 흐름 영향 없도록 LEVEL/BUTTON/SPECIAL 매치된 경우에만 흡수 시도.
+  function isStructuralHeader(s: string): boolean {
+    return (
+      LEVEL_HEADER.test(s) ||
+      BUTTON_HEADER.test(s) ||
+      SPECIAL_HEADER.test(s) ||
+      /^\d+\.\s+/.test(s) ||
+      BU_PATTERN.test(s) ||
+      LABEL_PATTERN.test(s) ||
+      DASH_PREFIX.test(s)
+    );
+  }
+  function canAbsorbSubtitle(next: string | undefined): boolean {
+    if (!next) return false;
+    const t = next.trim();
+    if (!t) return false;
+    if (NOISE_PATTERN.test(t)) return false;
+    if (isStructuralHeader(t)) return false;
+    if (QUOTE_PREFIX.test(t)) return false; // 인용/에피그래프는 부제 아님.
+    if (t.length > 60) return false;
+    if (SENTENCE_END.test(t)) return false;
+    return true;
+  }
+
   let index = 0;
-  for (const rawLine of lines) {
+  for (let li = 0; li < lines.length; li++) {
+    const rawLine = lines[li];
     const line = rawLine.trim();
     if (!line) continue;
 
     // 0. 꼬리 노이즈 스킵 — 구분자/공백뿐인 줄만.
     if (NOISE_PATTERN.test(line)) continue;
+
+    // ── 4단계 목차 분기 (완벽한 원시인 등) ──
+    // LEVEL N: 제목  →  새 대파트. 다음 줄이 subtitle 조건 맞으면 흡수.
+    const levelMatch = line.match(LEVEL_HEADER);
+    if (levelMatch) {
+      index++;
+      const p: KyoboPart = {
+        index,
+        label: `LEVEL ${levelMatch[1]}`,
+        title: levelMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        p.subtitle = lines[li + 1].trim();
+        li++; // 다음 라인 소비.
+      }
+      parts.push(p);
+      continue;
+    }
+    // BUTTON N. 제목 → 현재 대파트의 섹션. 대파트 없으면 독립 섹션으로 새 파트 생성 방지
+    // → 그대로 기타 분기로 떨어뜨리지 않고, 안전하게 라벨 없는 파트로 승격.
+    const buttonMatch = line.match(BUTTON_HEADER);
+    if (buttonMatch) {
+      const sec: KyoboSection = {
+        title: buttonMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        label: `BUTTON ${buttonMatch[1]}`,
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        sec.subtitle = lines[li + 1].trim();
+        li++;
+      }
+      if (parts.length > 0) {
+        parts[parts.length - 1].sections.push(sec);
+      } else {
+        // 대파트 없이 BUTTON 만 떠 있는 상황 — 드물지만 방어적으로 자체 파트화.
+        index++;
+        parts.push({
+          index,
+          label: sec.label ?? "",
+          title: sec.title,
+          startPage: 0,
+          endPage: 0,
+          sections: [],
+          subtitle: sec.subtitle,
+        });
+      }
+      continue;
+    }
+    // START: / END: / ERROR: → 프롤로그/에필로그급 대파트. 원문 키워드 유지.
+    const specialMatch = line.match(SPECIAL_HEADER);
+    if (specialMatch) {
+      index++;
+      const p: KyoboPart = {
+        index,
+        label: specialMatch[1], // START / END / ERROR 원문.
+        title: specialMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      };
+      if (canAbsorbSubtitle(lines[li + 1])) {
+        p.subtitle = lines[li + 1].trim();
+        li++;
+      }
+      parts.push(p);
+      continue;
+    }
 
     // 1. 대시 접두 — 전통적인 epigraph 표기. 섹션 병합.
     if (DASH_PREFIX.test(line)) {

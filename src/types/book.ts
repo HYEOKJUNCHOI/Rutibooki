@@ -6,6 +6,11 @@ export interface BookSection {
   title: string;
   startPage: number;
   endPage: number;
+  // 섹션 라벨(예: "BUTTON 14"). 4단계 목차(완벽한 원시인 등)의 섹션 번호 보존용.
+  // 2단계/1단계 책에는 없음 — undefined 면 UI 는 라벨 생략.
+  label?: string;
+  // 섹션 부제목 — 섹션 제목 다음 줄에 짧게 붙는 설명. 4단계 목차에서만 채워짐.
+  subtitle?: string;
 }
 
 export interface BookPart {
@@ -17,6 +22,9 @@ export interface BookPart {
   startPage: number;
   endPage: number;
   sections: BookSection[];
+  // 대파트 부제목 — 4단계 목차(LEVEL N: 제목 다음 줄) 에서 추출한 짧은 설명.
+  // 2단계 이하 책에는 비어있음. FullJourney 의 4줄 슬롯 2번 보조 표시에 쓰일 수 있음.
+  subtitle?: string;
 }
 
 export interface Book {

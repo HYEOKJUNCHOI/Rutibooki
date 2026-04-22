@@ -152,20 +152,28 @@ export async function scrapeKyoboToc(
 
   const QUOTE_PREFIX = /^[""''""‹›«»„‚"'„‟""‹›]/;
   const DASH_PREFIX = /^[-‐‑‒–—―]\s*/;
-  const SENTENCE_END = /[.!?。!?]\s*$/;
+  const SENTENCE_END = /[.!?。!?．]\s*$/;
+  // 다중 문장 신호 — 마침표+공백+한글/영문 (prose 의 결정적 단서).
+  const MULTI_SENTENCE = /[.!?。!?．]\s+\S/;
   // "제1부 인지혁명", "1부 인지혁명" 형태.
   const BU_PATTERN = /^(제?\s*\d+\s*부)\s*[:\s]?\s*(.+)$/;
   // 알려진 라벨 — 서문·프롤로그·부록 등. 라벨 뒤에 내용 붙는 경우 많음.
   const LABEL_PATTERN = /^(출간\s*\d+주년\s*기념\s*특별\s*서문|특별\s*서문|개정판\s*서문|서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|들어가는\s*글|감사의\s*글|감사의말|추천사|추천의\s*글|주석|부록|참고문헌|찾아보기|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|독자에게|저자의\s*말|역사연대표)\s*[_:\-\s]*\s*(.*)$/;
-  // 꼬리 노이즈 — "— 까지", "- 부터" 같은 3자 이하 꼬리.
-  const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]*\S{0,4}\s*$/;
+  // 진짜 노이즈만 — 구분자·공백뿐인 줄, 또는 1-2자 단독 토큰.
+  // [2026-04-22] 기존 \S{0,4} 는 "탓하기"(3자) 같은 한국어 챕터 제목까지 먹어서 축소.
+  const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]+$/;
 
-  function isEpigraph(line: string): boolean {
+  function isEpigraph(line: string, prevPart: KyoboPart | undefined): boolean {
     // 따옴표 시작 — 에피그래프 확정.
     if (QUOTE_PREFIX.test(line)) return true;
-    // 완결형 문장 (마침표·물음표·느낌표로 끝) + 10자 이상 → 경구 판정.
-    // 챕터 제목은 거의 마침표 없음. 있더라도 짧은 제목은 희귀.
-    if (SENTENCE_END.test(line) && line.length >= 10) return true;
+    if (!SENTENCE_END.test(line)) return false;
+    // 다중 문장 = prose 확정 (예: "정상이다. 더 미친...").
+    if (MULTI_SENTENCE.test(line)) return true;
+    // 충분히 길면(30자+) prose 가능성 높음.
+    if (line.length >= 30) return true;
+    // 직전이 번호 챕터(label 이 숫자) 면 그 챕터의 경구로 간주.
+    if (prevPart && /^\d+$/.test(prevPart.label)) return true;
+    // 짧은 ? 종결 (예: "왜 지금은 못 하는가?") 은 챕터 제목 가능성 — epigraph 거부.
     return false;
   }
 
@@ -174,8 +182,8 @@ export async function scrapeKyoboToc(
     const line = rawLine.trim();
     if (!line) continue;
 
-    // 0. 꼬리 노이즈 스킵.
-    if (NOISE_PATTERN.test(line) && line.length <= 5) continue;
+    // 0. 꼬리 노이즈 스킵 — 구분자/공백뿐인 줄만.
+    if (NOISE_PATTERN.test(line)) continue;
 
     // 1. 대시 접두 — 전통적인 epigraph 표기. 섹션 병합.
     if (DASH_PREFIX.test(line)) {
@@ -207,7 +215,7 @@ export async function scrapeKyoboToc(
 
     // 3. 에피그래프 (따옴표 시작 / 마침표 종결) — 직전 챕터 섹션으로.
     //    직전 챕터가 없으면(예: 맨 앞) 독립 PART 로 떨어뜨림.
-    if (isEpigraph(line) && parts.length > 0) {
+    if (isEpigraph(line, parts[parts.length - 1]) && parts.length > 0) {
       const clean = line
         .replace(QUOTE_PREFIX, "")
         .replace(/[""''""]+\s*$/, "")

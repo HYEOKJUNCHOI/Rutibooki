@@ -124,14 +124,19 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
 
   const QUOTE_PREFIX = /^[""''""‹›«»„‚"'„‟""‹›]/;
   const DASH_PREFIX = /^[-‐‑‒–—―]\s*/;
-  const SENTENCE_END = /[.!?。!?]\s*$/;
+  const SENTENCE_END = /[.!?。!?．]\s*$/;
+  const MULTI_SENTENCE = /[.!?。!?．]\s+\S/;
   const BU_PATTERN = /^(제?\s*\d+\s*부)\s*[:\s]?\s*(.+)$/;
   const LABEL_PATTERN = /^(출간\s*\d+주년\s*기념\s*특별\s*서문|특별\s*서문|개정판\s*서문|서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|들어가는\s*글|감사의\s*글|감사의말|추천사|추천의\s*글|주석|부록|참고문헌|찾아보기|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|독자에게|저자의\s*말|역사연대표)\s*[_:\-\s]*\s*(.*)$/;
-  const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]*\S{0,4}\s*$/;
+  // [2026-04-22] 한국어 짧은 챕터 제목(예: "탓하기"·"불안") 보호 — 구분자뿐인 줄만 노이즈.
+  const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]+$/;
 
-  function isEpigraph(line) {
+  function isEpigraph(line, prevPart) {
     if (QUOTE_PREFIX.test(line)) return true;
-    if (SENTENCE_END.test(line) && line.length >= 10) return true;
+    if (!SENTENCE_END.test(line)) return false;
+    if (MULTI_SENTENCE.test(line)) return true;
+    if (line.length >= 30) return true;
+    if (prevPart && /^\d+$/.test(prevPart.label)) return true;
     return false;
   }
 
@@ -140,8 +145,8 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // 0. 꼬리 노이즈 스킵.
-    if (NOISE_PATTERN.test(line) && line.length <= 5) continue;
+    // 0. 노이즈 스킵 — 구분자/공백뿐인 줄만.
+    if (NOISE_PATTERN.test(line)) continue;
 
     // 1. 대시 접두 — 섹션 병합.
     if (DASH_PREFIX.test(line)) {
@@ -172,7 +177,7 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
     }
 
     // 3. 에피그래프 — 직전 챕터 섹션 병합.
-    if (isEpigraph(line) && parts.length > 0) {
+    if (isEpigraph(line, parts[parts.length - 1]) && parts.length > 0) {
       const clean = line
         .replace(QUOTE_PREFIX, "")
         .replace(/[""''""]+\s*$/, "")

@@ -641,7 +641,9 @@ function PartRow({
             indexLabel = part.label;
             bodyTitle = part.title;
           } else {
-            indexLabel = `PART ${String(part.index).padStart(2, "0")}`;
+            // [2026-04-22] 챕터 번호 없는 책(자기계발 등) — 옛 "PART NN" 폴백 대신
+            // 가벼운 순번 숫자만. 사용자가 PART 라는 호칭에 갇히지 않도록.
+            indexLabel = String(part.index);
             const emIdx = part.title.indexOf(" — ");
             const colonIdx = part.title.indexOf(":");
             if (emIdx >= 0) {

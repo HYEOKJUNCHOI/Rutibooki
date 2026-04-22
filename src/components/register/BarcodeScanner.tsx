@@ -331,11 +331,11 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
                 pattern="[0-9]*"
                 value={manualIsbn}
                 onChange={(e) => {
-                  // [2026-04-22] 978-89-... 식으로 하이픈 붙여 적어도 OK — 숫자만 남김.
-                  setManualIsbn(e.target.value.replace(/\D/g, ""));
+                  // [2026-04-22] 하이픈 붙여 적어도 OK — 숫자만 남기고 13자리로 자름.
+                  // maxLength 는 원문 기준이라 979-11-... 같은 하이픈 포함 입력이 13자리 전에 잘려나감. 그래서 onChange 에서 처리.
+                  setManualIsbn(e.target.value.replace(/\D/g, "").slice(0, 13));
                   if (manualError) setManualError(null);
                 }}
-                maxLength={13}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") submitManual();
                 }}

@@ -17,7 +17,9 @@ import { splitTitle } from "@/utils/title";
 //   이후: 가장 작은 독서 단위(섹션/BUTTON/챕터) 를 역으로 찍음. 타겟이 "작게라도 읽어라" 이기 때문.
 //         LEVEL 은 역이 아니라 "역 그룹 헤더" — 레일 중간에 끼는 장 표지.
 //
-// 역 = 진입점(•) + 슬롯2(라벨+제목 한 줄 / 부제목 한 줄) + 구분선.
+// 역 = 진입점(•) + 슬롯2(라벨+제목 한 줄 / 부제목 한 줄).
+// 구분선은 UI 에 불필요 — "* — * — * — *" 는 개념 표현용 텍스트였으므로 제거.
+// 역 사이 간격은 STATION_H 의 아래 여백(marginBottom 역할)으로만 유지.
 // 그룹 헤더 = 좌우 대시 + 가운데 "LEVEL n  제목" + (선택) 부제목. 진입점 없음.
 //
 // 레일 y 계산은 "역 리스트" 기준이 아니라 "레일 항목 리스트(그룹 헤더 + 역 섞인 순서)" 기준으로
@@ -50,18 +52,18 @@ const COVER_BOTTOM_Y = COVER_Y + COVER_H;
 const FIRST_STEP_Y = 32; // 커버 → 첫 항목까지 짧게.
 
 // ── 슬롯·행 높이 ─────────────────────────────────────────
-// 역(station) = 슬롯 2개 + 구분선 = STATION_H 고정.
+// 역(station) = 슬롯 2개 + 아래 자연 여백 = STATION_H 고정.
 // 그룹 헤더(group-header) = GROUP_HEADER_H 고정 — 역 사이 리듬에 편입.
+// 구분선 제거로 DIVIDER_HEIGHT(16px) 만큼 역 간격이 줄어들어 16px 여백으로 대체.
 const SLOT_NBSP = "\u00A0";
 const SLOT_HEIGHT = 14;
-const DIVIDER_HEIGHT = 16;
-const STATION_H = SLOT_HEIGHT * 2 + DIVIDER_HEIGHT + 8; // 슬롯2 + 구분선 + 아래 여백
+const STATION_MARGIN_BOTTOM = 16; // 구분선 대신 자연 여백으로 역 사이 숨 유지
+const STATION_H = SLOT_HEIGHT * 2 + STATION_MARGIN_BOTTOM + 8; // 슬롯2 + 아래 여백
 const GROUP_HEADER_H = 48;
 
 // ── 색 상수 ──────────────────────────────────────────────
 const LABEL_COLOR = "#7A7A7A";
 const SUBTITLE_COLOR = "#9A9A9A";
-const STATION_DIVIDER = "* — * — * — * — *";
 const GROUP_TITLE_COLOR = "#C8C8C8";
 const GROUP_DASH_COLOR = "#3A3A3A";
 
@@ -756,7 +758,7 @@ function GroupHeader({
 }
 
 // ─────────────────────────────────────────────────────────
-// 역(Station) — 슬롯2 고정. 진입점(•) + 라벨행 + 부제목 + 구분선.
+// 역(Station) — 슬롯2 고정. 진입점(•) + 라벨행 + 부제목.
 // ─────────────────────────────────────────────────────────
 interface StationRowProps {
   part: BookPart;
@@ -953,7 +955,7 @@ function StationRow({
         </div>
       )}
 
-      {/* 라벨 블록 — 슬롯2 + 구분선. 진입점(•)은 슬롯[1] 중앙에 정렬. */}
+      {/* 라벨 블록 — 슬롯2. 진입점(•)은 슬롯[1] 중앙에 정렬. */}
       <div
         style={{
           position: "absolute",
@@ -961,6 +963,7 @@ function StationRow({
           top: nodeY - SLOT_HEIGHT / 2,
           right: 0,
           paddingRight: 4,
+          marginBottom: STATION_MARGIN_BOTTOM,
         }}
       >
         <StationLabelRow
@@ -980,21 +983,6 @@ function StationRow({
             letterSpacing: "-0.2px",
           }}
         />
-        <div
-          style={{
-            height: DIVIDER_HEIGHT,
-            lineHeight: `${DIVIDER_HEIGHT}px`,
-            fontSize: 10,
-            color: "#2A2A2A",
-            letterSpacing: 2,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "clip",
-            marginTop: 2,
-          }}
-        >
-          {STATION_DIVIDER}
-        </div>
       </div>
     </>
   );

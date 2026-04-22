@@ -4,26 +4,17 @@
 // next/image 대신 <img> 직접 사용 — 표지 URL 은 외부 도메인 + 동적 검색 결과라
 // remote patterns 등록 부담이 크고 CORS/placeholder 단순화 목적.
 
-import type { CSSProperties } from "react";
-import { Book, BookPart, BookSection } from "@/types/book";
+import { Book, BookPart } from "@/types/book";
 import { calcProgress, getActivePart, getActiveSection } from "@/utils/reading";
 import { useBooksStore } from "@/store/booksStore";
 import { splitTitle } from "@/utils/title";
 
-// 여정 카드 v6 — 버스 노선 스타일 + "섹션 단위 역" 재구성.
-//
-// 철학 전환 [2026-04-22]:
-//   이전: LEVEL(BookPart) 을 역(station) 으로 찍음 → 한 역이 너무 크고 "오늘 뭘 읽지?" 가 모호함.
-//   이후: 가장 작은 독서 단위(섹션/BUTTON/챕터) 를 역으로 찍음. 타겟이 "작게라도 읽어라" 이기 때문.
-//         LEVEL 은 역이 아니라 "역 그룹 헤더" — 레일 중간에 끼는 장 표지.
-//
-// 역 = 진입점(•) + 슬롯2(라벨+제목 한 줄 / 부제목 한 줄).
-// 구분선은 UI 에 불필요 — "* — * — * — *" 는 개념 표현용 텍스트였으므로 제거.
-// 역 사이 간격은 STATION_H 의 아래 여백(marginBottom 역할)으로만 유지.
-// 그룹 헤더 = 좌우 대시 + 가운데 "LEVEL n  제목" + (선택) 부제목. 진입점 없음.
-//
-// 레일 y 계산은 "역 리스트" 기준이 아니라 "레일 항목 리스트(그룹 헤더 + 역 섞인 순서)" 기준으로
-// 다시 계산되어야 함. 그룹 헤더도 높이를 먹어야 역끼리 사이가 일정해 보임.
+// 여정 카드 v5 — 버스 노선 스타일.
+// - 레일 = "도로": 두꺼운 어두운 스트로크 + 중앙 차선 점선으로 레이어링.
+// - 곡선은 단일 sine 가 아니라 다주파 합성으로 유기적 굴곡 — 지하철 노선도(일정) 아닌 버스 노선(유기적).
+// - 노드 = "정류장": 원 + 은은한 외부 halo 로 "여기 멈춤" 느낌.
+// - 진행률 = 녹색 페인트 덧칠: 지나온 경로만 형광 초록으로 glow.
+// - 커버가 시발 정류장, 완독이 종점. 파트들은 중간 정류장.
 
 interface FullJourneyProps {
   book: Book;
@@ -49,80 +40,10 @@ function formatShortDate(iso: string): string {
   return `${mm}.${dd}`;
 }
 const COVER_BOTTOM_Y = COVER_Y + COVER_H;
-const FIRST_STEP_Y = 32; // 커버 → 첫 항목까지 짧게.
-
-// ── 슬롯·행 높이 ─────────────────────────────────────────
-// 역(station) = 슬롯 2개 + 아래 자연 여백 = STATION_H 고정.
-// 그룹 헤더(group-header) = GROUP_HEADER_H 고정 — 역 사이 리듬에 편입.
-// 구분선 제거로 DIVIDER_HEIGHT(16px) 만큼 역 간격이 줄어들어 16px 여백으로 대체.
-const SLOT_NBSP = "\u00A0";
-const SLOT_HEIGHT = 14;
-const STATION_MARGIN_BOTTOM = 16; // 구분선 대신 자연 여백으로 역 사이 숨 유지
-const STATION_H = SLOT_HEIGHT * 2 + STATION_MARGIN_BOTTOM + 8; // 슬롯2 + 아래 여백
-const GROUP_HEADER_H = 48;
-
-// ── 색 상수 ──────────────────────────────────────────────
-const LABEL_COLOR = "#7A7A7A";
-const SUBTITLE_COLOR = "#9A9A9A";
-const GROUP_TITLE_COLOR = "#C8C8C8";
-const GROUP_DASH_COLOR = "#3A3A3A";
-
-// ─────────────────────────────────────────────────────────
-// 레일 아이템 — 그룹 헤더 / 역(station) 섞인 순서 리스트.
-// 역만 진입점(•) 노드를 가짐. 그룹 헤더는 장식.
-// ─────────────────────────────────────────────────────────
-type RailItem =
-  | {
-      kind: "group-header";
-      part: BookPart;
-      key: string;
-    }
-  | {
-      kind: "station";
-      part: BookPart;
-      // section 없으면 part 자체를 역으로 렌더(케이스 B).
-      section: BookSection | null;
-      key: string;
-      // 해당 역의 시작 페이지 — isPast/isCurrent 판정 기준.
-      startPage: number;
-      endPage: number;
-    };
-
-function buildRailItems(book: Book): RailItem[] {
-  const items: RailItem[] = [];
-  for (const part of book.parts) {
-    if (part.sections && part.sections.length > 0) {
-      // 케이스 A: 섹션 있는 책 — 대파트는 그룹 헤더로, 각 섹션이 역.
-      items.push({
-        kind: "group-header",
-        part,
-        key: `gh-${part.index}`,
-      });
-      for (let i = 0; i < part.sections.length; i++) {
-        const sec = part.sections[i];
-        items.push({
-          kind: "station",
-          part,
-          section: sec,
-          key: `st-${part.index}-${i}`,
-          startPage: sec.startPage,
-          endPage: sec.endPage,
-        });
-      }
-    } else {
-      // 케이스 B: 섹션 없는 책 — 대파트 자체가 역. 그룹 헤더 없음.
-      items.push({
-        kind: "station",
-        part,
-        section: null,
-        key: `st-${part.index}`,
-        startPage: part.startPage,
-        endPage: part.endPage,
-      });
-    }
-  }
-  return items;
-}
+const RAIL_START_Y = COVER_BOTTOM_Y + 4; // 커버 바로 아래에서 레일 시작.
+// 책(커버) → PART 1 간격을 기준 단위로, 모든 정류장 사이를 균등 간격으로 배치.
+// 현재 파트의 섹션 스트립은 별도 행 높이를 먹지 않고 라벨 블록 안에서 오버플로우 — 레이아웃 리듬 보존.
+const STEP_Y = 64; // 정류장(커버 포함) 간 도로 길이.
 
 export default function FullJourney({
   book,
@@ -135,73 +56,42 @@ export default function FullJourney({
   const safePage = Math.max(1, currentPage);
   const activeSection = getActiveSection(book, safePage);
   const activePart = getActivePart(book, safePage);
+  const currentPartIdx = book.parts.findIndex(
+    (p) => p.index === activePart.index,
+  );
+  const activeSectionKey = `${activeSection.startPage}-${activeSection.endPage}`;
   const isFinished = overall >= 100;
 
-  const items = buildRailItems(book);
-
-  // 각 아이템 y 상단 좌표 — 커버 바로 아래부터 순차 누적.
-  // 그룹 헤더와 역이 각자 다른 높이를 먹으므로 y 는 "이전 아이템 높이 합"을 누적.
-  const itemTops: number[] = [];
-  let cursor = COVER_BOTTOM_Y + FIRST_STEP_Y;
-  for (let i = 0; i < items.length; i++) {
-    itemTops.push(cursor);
-    const h = items[i].kind === "group-header" ? GROUP_HEADER_H : STATION_H;
-    cursor += h;
+  // 각 파트 노드의 y — 커버→PART1 은 짧게(STEP_Y/2), 이후 정류장은 STEP_Y 균등.
+  // 시작점이 너무 멀어보여 답답한 인상을 주던 문제를 절반으로 좁혀 해결.
+  const partYs: number[] = [];
+  const FIRST_STEP_Y = STEP_Y / 2;
+  for (let i = 0; i < book.parts.length; i++) {
+    partYs.push(COVER_BOTTOM_Y + FIRST_STEP_Y + i * STEP_Y);
   }
-  // 완독 노드는 마지막 아이템 끝에서 약간 여유 두고.
-  const goalY = cursor + 12;
-  const svgHeight = goalY + 16;
+  // 마지막 PART → 완독은 기본 간격의 약 80% — 절반은 너무 붙고, 풀은 너무 텅 빔.
+  const goalY = partYs[partYs.length - 1] + STEP_Y * 0.7;
+  // 현재 파트의 섹션 스트립이 라벨 블록 아래로 내려오므로 svgHeight 는 여유를 둠.
+  const svgHeight = goalY + (currentPartIdx >= 0 ? 24 : 12);
 
-  // "현재 역" 인덱스 판정 — 섹션 단위로.
-  //   케이스 A: activeSection 과 매칭되는 station item.
-  //   케이스 B: activePart 와 매칭되는 station item.
-  // TODO(혁준, 2026-04-22): readingStore 에 section 단위 현재 위치 저장 확장.
-  //   현재는 currentPage → getActiveSection 으로 파생 — 이미 섹션 단위로 작동하므로 호환됨.
-  const currentStationIdx = items.findIndex((it) => {
-    if (it.kind !== "station") return false;
-    if (it.section) {
-      return (
-        it.part.index === activePart.index &&
-        it.section.startPage === activeSection.startPage &&
-        it.section.endPage === activeSection.endPage
-      );
-    }
-    // 섹션 없는 역 = 대파트 자체.
-    return it.part.index === activePart.index;
-  });
-
-  // 역 노드만 X 스윙 적용 — 그룹 헤더는 중앙 정렬로 따로 렌더.
-  // 스윙 t 는 "전체 역 개수 중 몇 번째 역인가" 기준 — 그룹 헤더로 리듬 깨지지 않게.
-  const stationIndices: number[] = items
-    .map((it, i) => (it.kind === "station" ? i : -1))
-    .filter((i) => i !== -1);
-  const stationCount = stationIndices.length;
-
-  function nodeXForStation(itemIdx: number): number {
-    if (stationCount <= 1) return RAIL_CX;
-    const order = stationIndices.indexOf(itemIdx);
-    const t = order / (stationCount - 1);
+  // 파트 노드 x — 다주파 합성으로 유기적 굴곡. 단일 sin 은 대칭이라 "지하철 노선도" 느낌.
+  // 저주파 2π + 고주파 5π*0.3 결합 → 대칭성 깨고 동네 골목 도는 버스 노선 감성.
+  const partXs: number[] = book.parts.map((_, i) => {
+    if (book.parts.length === 1) return RAIL_CX;
+    const t = i / (book.parts.length - 1);
     const base = Math.sin(t * Math.PI * 1.8) * RAIL_AMP;
     const wobble = Math.sin(t * Math.PI * 5.1 + 0.4) * (RAIL_AMP * 0.28);
     return RAIL_CX + base + wobble;
-  }
+  });
 
-  // 각 역의 "진입점 y" = 해당 아이템 top + 슬롯[1] 중앙.
-  //   슬롯[1] 중앙 = SLOT_HEIGHT/2 위치. 라벨 블록을 nodeY - SLOT_HEIGHT/2 에 맞춰 둠.
-  function nodeYForStation(itemIdx: number): number {
-    return itemTops[itemIdx] + SLOT_HEIGHT / 2;
-  }
-
-  // 레일 path — 커버 바닥 → 각 역 노드 → 완독.
-  // 그룹 헤더 구간은 노드가 없지만 레일은 그 구간을 직선으로 통과.
-  const points: Array<{ x: number; y: number; dashed?: boolean }> = [
+  // SVG path — 커버 바닥 → 각 파트 노드 → 완독. Smooth cubic bezier.
+  const points: Array<{ x: number; y: number }> = [
     { x: RAIL_CX, y: COVER_BOTTOM_Y + 2 },
+    ...partXs.map((x, i) => ({ x, y: partYs[i] })),
+    { x: RAIL_CX, y: goalY },
   ];
-  for (const si of stationIndices) {
-    points.push({ x: nodeXForStation(si), y: nodeYForStation(si) });
-  }
-  points.push({ x: RAIL_CX, y: goalY });
 
+  // 부드러운 S자 — 각 구간을 수직 중점을 제어점으로 하는 cubic bezier 로 연결.
   let pathD = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
@@ -209,16 +99,6 @@ export default function FullJourney({
     const midY = (prev.y + curr.y) / 2;
     pathD += ` C ${prev.x} ${midY}, ${curr.x} ${midY}, ${curr.x} ${curr.y}`;
   }
-
-  // 그룹 헤더 구간의 레일 강조(점선) — 역이 아니라 "전환 구간" 임을 암시.
-  // group-header 아이템의 y 범위만 커버하는 세로선 오버레이를 역 사이에 그림.
-  const groupHeaderBands: Array<{ y1: number; y2: number }> = items
-    .map((it, i) =>
-      it.kind === "group-header"
-        ? { y1: itemTops[i], y2: itemTops[i] + GROUP_HEADER_H }
-        : null,
-    )
-    .filter((b): b is { y1: number; y2: number } => b !== null);
 
   return (
     <div
@@ -232,6 +112,8 @@ export default function FullJourney({
         overflow: "hidden",
       }}
     >
+      {/* 여정 캔버스 — SVG 배경 + 절대 배치된 커버/노드/라벨.
+          진행률(%)은 캔버스 내부에서 START/제목 두 줄과 같은 열 높이에 우측 정렬. */}
       <div
         style={{
           position: "relative",
@@ -239,7 +121,7 @@ export default function FullJourney({
           height: svgHeight,
         }}
       >
-        {/* 커브 레일 — SVG 로 뒤에 깔고, 노드·라벨은 div 로 앞에 올림 */}
+        {/* 커브 레일 — SVG 로 그려 뒤에 깔고, 노드·라벨은 div 로 앞에 올림 */}
         <svg
           viewBox={`0 0 ${SVG_W} ${svgHeight}`}
           width="100%"
@@ -253,7 +135,11 @@ export default function FullJourney({
           preserveAspectRatio="xMinYMin meet"
           aria-hidden
         >
-          {/* 레일 4겹 레이어 — 기존 유지 */}
+          {/* ── 버스 노선: 레이어 4겹 ──
+              1) 도로 가장자리(바깥 테두리) — 폭 6, 아주 어두운 톤으로 도로 윤곽.
+              2) 도로 본체 — 폭 4, 약간 밝은 톤으로 노면.
+              3) 중앙 차선 점선 — 노면 위 점선.
+              4) 진행률 초록 페인트 — 지나온 구간만 덧칠 + glow. */}
           <path
             d={pathD}
             fill="none"
@@ -276,21 +162,6 @@ export default function FullJourney({
             strokeDasharray="5 6"
             strokeLinecap="round"
           />
-          {/* 그룹 헤더 구간 — 얇은 점선 세로선으로 "전환 구간" 암시.
-              RAIL_CX 수직선이 아니라 실제 path 위로 덧칠 효과를 주기 어려우니
-              그룹 헤더 y 범위에 RAIL_CX 기준 짧은 점선을 별도로 깜. */}
-          {groupHeaderBands.map((b, i) => (
-            <line
-              key={`gh-band-${i}`}
-              x1={RAIL_CX}
-              y1={b.y1}
-              x2={RAIL_CX}
-              y2={b.y2}
-              stroke="#2A2A2A"
-              strokeWidth={1}
-              strokeDasharray="2 3"
-            />
-          ))}
           {overall > 0 && (
             <path
               d={pathD}
@@ -308,19 +179,22 @@ export default function FullJourney({
           )}
         </svg>
 
-        {/* 진행률 % — 커버 오른쪽 상단 */}
+        {/* 진행률 — START + 제목 두 줄 묶음의 우측 끝에 세로 중앙 정렬.
+            색은 진행 중임을 강조하는 브랜드 그린. */}
         <div
           style={{
             position: "absolute",
             right: 0,
             top: COVER_Y + 4,
-            height: 38,
+            height: 38, // START(라벨) + 제목 한 줄 대략 합 — 두 줄 가운데 정렬 기준.
             display: "flex",
             alignItems: "center",
             paddingRight: 4,
           }}
         >
           {overall === 0 ? (
+            // 0% 는 "아직 0" 이 아니라 "이제 시작" 의 상태 — 숫자 대신 CTA 성 문구.
+            // 앱 버튼 "책 펼쳤어요" 와 톤 통일 위해 "펼쳐보기".
             <span
               style={{
                 fontSize: 14,
@@ -360,7 +234,7 @@ export default function FullJourney({
           )}
         </div>
 
-        {/* 커버 블록 */}
+        {/* 커버 + 메타 블록 */}
         <div
           style={{
             position: "absolute",
@@ -405,7 +279,8 @@ export default function FullJourney({
           )}
         </div>
 
-        {/* 커버 우측 메타 블록 */}
+        {/* 커버 우측 — 책 메타(START 라벨 + 제목 + 저자/출판사).
+            우측 % 와 겹치지 않도록 paddingRight 확보. */}
         <div
           style={{
             position: "absolute",
@@ -426,6 +301,7 @@ export default function FullJourney({
           >
             {formatShortDate(book.registeredAt)} 부터
           </div>
+          {/* 메인 제목 + 부제(1줄 ellipsis). 커버(74px) 높이 안에 메타 다 들어가도록 컴팩트하게. */}
           {(() => {
             const { main, sub } = splitTitle(book.title);
             return (
@@ -467,6 +343,7 @@ export default function FullJourney({
               </>
             );
           })()}
+          {/* 저자 · 카테고리 칩 — 한 줄 안에 인라인으로 붙여서 높이 추가 방지. */}
           <div
             style={{
               display: "flex",
@@ -509,49 +386,42 @@ export default function FullJourney({
           </div>
         </div>
 
-        {/* 레일 아이템 — 그룹 헤더 + 역 섞인 순서 */}
-        {items.map((it, idx) => {
-          if (it.kind === "group-header") {
-            return (
-              <GroupHeader
-                key={it.key}
-                part={it.part}
-                top={itemTops[idx]}
-                labelXPct={(LABEL_X / SVG_W) * 100}
-              />
-            );
-          }
-          // station
-          const isPast = idx < currentStationIdx;
-          const isCurrent = idx === currentStationIdx;
-          const stLen = Math.max(1, it.endPage - it.startPage + 1);
-          const stProgress = isCurrent
+        {/* 파트 노드 + 라벨 */}
+        {book.parts.map((part, idx) => {
+          const isPast = idx < currentPartIdx;
+          const isCurrent = idx === currentPartIdx;
+          const partLen = Math.max(1, part.endPage - part.startPage + 1);
+          const partProgress = isCurrent
             ? Math.max(
                 0,
                 Math.min(
                   100,
-                  Math.round(((currentPage - it.startPage + 1) / stLen) * 100),
+                  Math.round(
+                    ((currentPage - part.startPage + 1) / partLen) * 100,
+                  ),
                 ),
               )
             : 0;
+
           return (
-            <StationRow
-              key={it.key}
-              part={it.part}
-              section={it.section}
+            <PartRow
+              key={part.index}
+              part={part}
               isPast={isPast}
               isCurrent={isCurrent}
-              stationProgress={stProgress}
+              partProgress={partProgress}
+              activeSectionKey={activeSectionKey}
+              activeSectionTitle={activeSection.title}
               currentPage={currentPage}
-              nodeXPct={(nodeXForStation(idx) / SVG_W) * 100}
-              nodeY={nodeYForStation(idx)}
+              nodeXPct={(partXs[idx] / SVG_W) * 100}
+              nodeY={partYs[idx]}
               labelXPct={(LABEL_X / SVG_W) * 100}
-              startPage={it.startPage}
             />
           );
         })}
 
-        {/* 완독 — 종점 */}
+        {/* 완독 — 종점. 도로 끝의 마지막 정류장.
+            goalDate 미설정 상태면 노란색으로 깜빡여서 "날짜 탭해주세요" 어필. */}
         <div
           style={{
             position: "absolute",
@@ -594,6 +464,8 @@ export default function FullJourney({
             }}
           />
         </div>
+        {/* "까지" 라벨 = 네이티브 달력 트리거. label 안에 숨긴 date input 을 두면
+            탭 즉시 모바일/데스크탑 네이티브 피커가 뜸. 커스텀 피커 무겁게 짤 필요 X. */}
         <label
           style={{
             position: "absolute",
@@ -612,6 +484,7 @@ export default function FullJourney({
             value={book.goalDate ? book.goalDate.slice(0, 10) : ""}
             onChange={(e) => {
               const v = e.target.value;
+              // 빈 값은 Firestore undefined 에러라 스킵. 날짜 지우기는 추후 별도 UI.
               if (!v) return;
               useBooksStore.getState().updateBook(book.id, {
                 goalDate: new Date(v).toISOString(),
@@ -654,248 +527,36 @@ export default function FullJourney({
 }
 
 // ─────────────────────────────────────────────────────────
-// 그룹 헤더 — 역이 아니라 "장 표지". 진입점 없음.
-// 좌우 대시 + 중앙 "LEVEL n  제목", 아래 부제목(있으면).
+// 파트 행 — 노드(좌우 스윙) + 라벨(우측 고정 컬럼)
 // ─────────────────────────────────────────────────────────
-function GroupHeader({
-  part,
-  top,
-  labelXPct,
-}: {
+interface PartRowProps {
   part: BookPart;
-  top: number;
-  labelXPct: number;
-}) {
-  const label = part.label || `PART ${part.index}`;
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${labelXPct}%`,
-        top,
-        right: 0,
-        paddingRight: 4,
-        height: GROUP_HEADER_H,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        gap: 2,
-      }}
-    >
-      {/* 라벨 + 제목 한 줄 — 좌우에 대시 장식으로 "장 경계" 느낌 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10,
-            color: GROUP_DASH_COLOR,
-            letterSpacing: 0,
-            flexShrink: 0,
-          }}
-        >
-          ━━
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: GROUP_TITLE_COLOR,
-            letterSpacing: 1,
-            flexShrink: 0,
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: GROUP_TITLE_COLOR,
-            letterSpacing: "-0.3px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            minWidth: 0,
-          }}
-        >
-          {part.title}
-        </span>
-        <span
-          style={{
-            fontSize: 10,
-            color: GROUP_DASH_COLOR,
-            letterSpacing: 0,
-            flexShrink: 0,
-            marginLeft: "auto",
-          }}
-        >
-          ━━
-        </span>
-      </div>
-      {part.subtitle ? (
-        <div
-          style={{
-            fontSize: 9,
-            fontWeight: 500,
-            color: "#8A8A8A",
-            letterSpacing: "-0.2px",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {part.subtitle}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────
-// 역(Station) — 슬롯2 고정. 진입점(•) + 라벨행 + 부제목.
-// ─────────────────────────────────────────────────────────
-interface StationRowProps {
-  part: BookPart;
-  section: BookSection | null;
   isPast: boolean;
   isCurrent: boolean;
-  stationProgress: number;
+  partProgress: number;
+  activeSectionKey: string;
+  activeSectionTitle: string;
   currentPage: number;
-  nodeXPct: number;
-  nodeY: number;
-  labelXPct: number;
-  startPage: number;
+  nodeXPct: number; // % of container width
+  nodeY: number; // px in SVG coords
+  labelXPct: number; // % of container width
 }
 
-function StationSlot({
-  text,
-  style,
-}: {
-  text: string;
-  style: CSSProperties;
-}) {
-  return (
-    <div
-      style={{
-        height: SLOT_HEIGHT,
-        lineHeight: `${SLOT_HEIGHT}px`,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        ...style,
-      }}
-    >
-      {text || SLOT_NBSP}
-    </div>
-  );
-}
-
-// 라벨+제목 한 줄. 라벨 비어있으면 gap 없이 제목만 — 레이아웃 안 깨지도록.
-function StationLabelRow({
-  label,
-  title,
-  labelColor,
-  titleColor,
-  titleSize,
-  titleWeight,
-}: {
-  label: string;
-  title: string;
-  labelColor: string;
-  titleColor: string;
-  titleSize: number;
-  titleWeight: number;
-}) {
-  return (
-    <div
-      style={{
-        height: SLOT_HEIGHT,
-        lineHeight: `${SLOT_HEIGHT}px`,
-        display: "flex",
-        alignItems: "center",
-        gap: label ? 6 : 0,
-        overflow: "hidden",
-        minWidth: 0,
-      }}
-    >
-      {label ? (
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: labelColor,
-            letterSpacing: 0.8,
-            flexShrink: 0,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}
-        </span>
-      ) : null}
-      <span
-        style={{
-          fontSize: titleSize,
-          fontWeight: titleWeight,
-          color: titleColor,
-          letterSpacing: "-0.3px",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          minWidth: 0,
-        }}
-      >
-        {title || SLOT_NBSP}
-      </span>
-    </div>
-  );
-}
-
-function StationRow({
+function PartRow({
   part,
-  section,
   isPast,
   isCurrent,
-  stationProgress,
+  partProgress,
+  activeSectionKey,
+  activeSectionTitle,
   currentPage,
   nodeXPct,
   nodeY,
   labelXPct,
-  startPage,
-}: StationRowProps) {
-  // 역 라벨/제목/부제목 — 케이스 A(섹션 있음) vs 케이스 B(섹션 없음) 분기.
-  //   A: section 의 label/title/subtitle 사용.
-  //   B: part 의 label/title/subtitle 사용.
-  const label = section
-    ? (section.label ?? "")
-    : (part.label ?? ""); // 케이스 B 에서 라벨 없을 수 있음 — 비어있으면 gap 없이 제목만
-  const title = section ? section.title : part.title;
-  const sub = section ? (section.subtitle ?? "") : (part.subtitle ?? "");
-
-  const labelColor = isCurrent
-    ? "#00FF7A"
-    : isPast
-      ? "#00B858"
-      : "#4A4A4A";
-  const titleColor = isCurrent
-    ? "#E8E8E8"
-    : isPast
-      ? "#9A9A9A"
-      : "#6A6A6A";
-  const subColor = isCurrent
-    ? SUBTITLE_COLOR
-    : isPast
-      ? "#6A6A6A"
-      : "#5A5A5A";
-
+}: PartRowProps) {
   return (
     <>
-      {/* 진입점(•) 노드 — 현재 역이면 링 프로그레스, 아니면 정류장 원 */}
+      {/* 노드 */}
       {isCurrent ? (
         <div
           style={{
@@ -905,17 +566,19 @@ function StationRow({
             transform: "translate(-50%, -50%)",
           }}
         >
-          <ProgressRingNode progress={stationProgress} page={currentPage} />
+          <ProgressRingNode progress={partProgress} page={currentPage} />
         </div>
       ) : (
+        // 버스 정류장 — 원 + 은은한 외부 halo 링(도로 위에 "여기 멈춤" 느낌).
+        // 미래 정류장은 원 안에 진입 페이지(시작 페이지) 숫자 표시 — "이 파트부터 여기서 시작" 힌트.
         <div
           style={{
             position: "absolute",
             left: `${nodeXPct}%`,
             top: nodeY,
             transform: "translate(-50%, -50%)",
-            width: isPast ? 18 : 22,
-            height: isPast ? 18 : 22,
+            width: isPast ? 18 : 24,
+            height: isPast ? 18 : 24,
             borderRadius: "50%",
             background: isPast ? "#1F4D33" : "#0D0D0D",
             border: `2px solid ${isPast ? "#00B858" : "#3A3A3A"}`,
@@ -949,47 +612,212 @@ function StationRow({
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {startPage}
+              {part.startPage}
             </span>
           )}
         </div>
       )}
 
-      {/* 라벨 블록 — 슬롯2. 진입점(•)은 슬롯[1] 중앙에 정렬. */}
+      {/* 라벨 블록 — 우측 고정 컬럼. 노드 y 에 맞춰 수직 정렬. */}
       <div
         style={{
           position: "absolute",
           left: `${labelXPct}%`,
-          top: nodeY - SLOT_HEIGHT / 2,
+          top: nodeY,
+          transform: "translateY(-50%)",
           right: 0,
           paddingRight: 4,
-          marginBottom: STATION_MARGIN_BOTTOM,
         }}
       >
-        <StationLabelRow
-          label={label}
-          title={title}
-          labelColor={labelColor}
-          titleColor={titleColor}
-          titleSize={isCurrent ? 13 : 12}
-          titleWeight={isCurrent ? 700 : 600}
-        />
-        <StationSlot
-          text={sub}
-          style={{
-            fontSize: 10,
-            fontWeight: 500,
-            color: subColor,
-            letterSpacing: "-0.2px",
-          }}
-        />
+        {/* 3-슬롯: [좌측 작은 캡스] [중간 태그] [큰 본문]
+            - 책 고유 호칭(label)이 있으면 좌측에 그대로 — "나침반 1", "프롤로그" 등.
+              이 경우 중간 태그는 생략, 본문에는 part.title 전체.
+            - label 없으면 "PART 01" 폴백 + 기존 분리자(" — " | ":") 로 tag/body 분리. */}
+        {(() => {
+          let indexLabel: string;
+          let tag = "";
+          let bodyTitle = "";
+          if (part.label) {
+            indexLabel = part.label;
+            bodyTitle = part.title;
+          } else {
+            // [2026-04-22] 챕터 번호 없는 책(자기계발 등) — 옛 "PART NN" 폴백 대신
+            // 가벼운 순번 숫자만. 사용자가 PART 라는 호칭에 갇히지 않도록.
+            indexLabel = String(part.index);
+            const emIdx = part.title.indexOf(" — ");
+            const colonIdx = part.title.indexOf(":");
+            if (emIdx >= 0) {
+              tag = part.title.slice(0, emIdx).trim();
+              bodyTitle = part.title.slice(emIdx + 3).trim();
+            } else if (colonIdx >= 0 && colonIdx < 20) {
+              tag = part.title.slice(0, colonIdx).trim();
+              bodyTitle = part.title.slice(colonIdx + 1).trim();
+            } else {
+              tag = part.title;
+            }
+          }
+          const hasSplit = bodyTitle.length > 0;
+          return (
+            <div>
+              {/* 윗줄 — PART 인덱스 + 태그(subtitle) */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 8,
+                  marginBottom: hasSplit ? 3 : 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 700,
+                    color: isCurrent
+                      ? "#00FF7A"
+                      : isPast
+                        ? "#00B858"
+                        : "#4A4A4A",
+                    letterSpacing: 1.5,
+                    flexShrink: 0,
+                  }}
+                >
+                  {indexLabel}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: isCurrent
+                      ? "#9AE0B9"
+                      : isPast
+                        ? "#7A9A8A"
+                        : "#5A5A5A",
+                    letterSpacing: "-0.2px",
+                    lineHeight: 1.25,
+                    // 분할 안 된 긴 제목은 2줄까지 감싸서 보여줌(ellipsis 대신).
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    wordBreak: "keep-all",
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {tag}
+                </span>
+              </div>
+              {/* 아랫줄 — 본문 타이틀(대시 뒤). 시각적 강조 포인트. */}
+              {hasSplit && (
+                <div
+                  style={{
+                    fontSize: isCurrent ? 13 : 12,
+                    fontWeight: isCurrent ? 700 : 600,
+                    color: isCurrent
+                      ? "#E8E8E8"
+                      : isPast
+                        ? "#9A9A9A"
+                        : "#6A6A6A",
+                    letterSpacing: "-0.3px",
+                    lineHeight: 1.3,
+                    wordBreak: "keep-all",
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {bodyTitle}
+                </div>
+              )}
+              {/* 현재 파트만 "지금 읽는 소제목" 한 줄. 지난·미래 파트는 체크 아이콘/정류장 원만으로 충분. */}
+              {isCurrent ? (
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 500,
+                    color: "#7AB894",
+                    letterSpacing: 0.3,
+                    marginTop: 3,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {activeSectionTitle}
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
+
+        {/* 현재 파트만 섹션 스트립 */}
+        {isCurrent && part.sections.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0,
+              marginTop: 7,
+              paddingRight: 10,
+            }}
+          >
+            {part.sections.map((s, i) => {
+              const key = `${s.startPage}-${s.endPage}`;
+              const isSecCurrent = key === activeSectionKey;
+              const isSecPast = currentPage > s.endPage && !isSecCurrent;
+              const isLast = i === part.sections.length - 1;
+              return (
+                <div
+                  key={key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flex: isLast ? "0 0 auto" : 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: isSecCurrent ? 7 : 5,
+                      height: isSecCurrent ? 7 : 5,
+                      borderRadius: "50%",
+                      background: isSecCurrent
+                        ? "#00FF7A"
+                        : isSecPast
+                          ? "#00B858"
+                          : "#2A2A2A",
+                      boxShadow: isSecCurrent
+                        ? "0 0 8px rgba(0,255,122,0.7)"
+                        : "none",
+                      animation: isSecCurrent
+                        ? "fj-section-pulse 1.4s ease-in-out infinite"
+                        : undefined,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  {!isLast && (
+                    <div
+                      style={{
+                        flex: 1,
+                        height: 1,
+                        background:
+                          isSecPast || isSecCurrent ? "#00B858" : "#2A2A2A",
+                        margin: "0 3px",
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────
-// 프로그레스 링 노드 — 현재 역 전용.
+// 프로그레스 링 노드 — 현재 파트 전용. stroke-dashoffset 로 진행률.
 // ─────────────────────────────────────────────────────────
 function ProgressRingNode({
   progress,
@@ -1046,6 +874,7 @@ function ProgressRingNode({
           style={{ transition: "stroke-dashoffset 600ms ease" }}
         />
       </svg>
+      {/* 링 안 숫자 = 현재 페이지. 파트 내부 진행도(%)는 stroke 의 채움 길이로 시각화. */}
       <span
         style={{
           fontSize: 8,

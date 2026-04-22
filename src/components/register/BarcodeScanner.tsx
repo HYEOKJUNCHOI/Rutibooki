@@ -35,6 +35,21 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
   const firedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState("바코드를 사각형 안에 맞춰주세요");
+  // [2026-04-22] 책이 물리적으로 없을 때(실 스캔 불가) 임시 대안 — ISBN 숫자만 쳐서 바로 파이프라인 태움.
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualIsbn, setManualIsbn] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
+
+  const submitManual = () => {
+    const isbn = manualIsbn.replace(/\D/g, "");
+    if (!ISBN13_RE.test(isbn)) {
+      setManualError("ISBN-13 은 978/979 로 시작하는 숫자 13자리예요");
+      return;
+    }
+    if (firedRef.current) return;
+    firedRef.current = true;
+    onDetect(isbn);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -278,6 +293,116 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
           >
             책 뒷면 ISBN 바코드를 비춰주세요
           </div>
+
+          {/* ISBN 직접 입력 — 책 없을 때 / 바코드 안 읽힐 때 대안. */}
+          {!manualOpen ? (
+            <button
+              onClick={() => setManualOpen(true)}
+              style={{
+                marginTop: 18,
+                padding: "10px 18px",
+                background: "transparent",
+                color: "#E8E8E8",
+                border: "1px solid #2A2A2A",
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: "-0.2px",
+              }}
+            >
+              ISBN 직접 입력
+            </button>
+          ) : (
+            <div
+              style={{
+                marginTop: 18,
+                width: "100%",
+                maxWidth: 320,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <input
+                autoFocus
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={manualIsbn}
+                onChange={(e) => {
+                  setManualIsbn(e.target.value);
+                  if (manualError) setManualError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitManual();
+                }}
+                placeholder="9791199383074"
+                style={{
+                  padding: "12px 14px",
+                  background: "#0E0E0E",
+                  color: "#E8E8E8",
+                  border: "1px solid #2A2A2A",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  letterSpacing: "0.5px",
+                  outline: "none",
+                }}
+              />
+              {manualError && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#FF6B6B",
+                    textAlign: "center",
+                  }}
+                >
+                  {manualError}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    setManualOpen(false);
+                    setManualIsbn("");
+                    setManualError(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "10px 0",
+                    background: "transparent",
+                    color: "#7A7A7A",
+                    border: "1px solid #2A2A2A",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={submitManual}
+                  style={{
+                    flex: 2,
+                    padding: "10px 0",
+                    background: "#00FF7A",
+                    color: "#000",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  등록 진행
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

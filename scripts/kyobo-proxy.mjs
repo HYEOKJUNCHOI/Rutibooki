@@ -117,14 +117,35 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
     .replace(/&quot;/g, '"')
     .trim();
 
+  // 파서 — src/lib/kyoboScraper.ts 와 동기화. 원본 주석 참조.
   const parts = [];
   const lines = tocText.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+
+  const QUOTE_PREFIX = /^[""''""‹›«»„‚"'„‟""‹›]/;
+  const DASH_PREFIX = /^[-‐‑‒–—―]\s*/;
+  const SENTENCE_END = /[.!?。!?]\s*$/;
+  const BU_PATTERN = /^(제?\s*\d+\s*부)\s*[:\s]?\s*(.+)$/;
+  const LABEL_PATTERN = /^(출간\s*\d+주년\s*기념\s*특별\s*서문|특별\s*서문|개정판\s*서문|서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|들어가는\s*글|감사의\s*글|감사의말|추천사|추천의\s*글|주석|부록|참고문헌|찾아보기|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|독자에게|저자의\s*말|역사연대표)\s*[_:\-\s]*\s*(.*)$/;
+  const NOISE_PATTERN = /^[-‐‑‒–—―=·•\s]*\S{0,4}\s*$/;
+
+  function isEpigraph(line) {
+    if (QUOTE_PREFIX.test(line)) return true;
+    if (SENTENCE_END.test(line) && line.length >= 10) return true;
+    return false;
+  }
+
   let index = 0;
-  for (const line of lines) {
-    const numMatch = line.match(/^(\d+)\.\s+(.+)$/);
-    if (/^[-–—]\s*/.test(line)) {
-      const sectionText = line.replace(/^[-–—]\s*/, "").trim();
-      if (parts.length > 0) {
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // 0. 꼬리 노이즈 스킵.
+    if (NOISE_PATTERN.test(line) && line.length <= 5) continue;
+
+    // 1. 대시 접두 — 섹션 병합.
+    if (DASH_PREFIX.test(line)) {
+      const sectionText = line.replace(DASH_PREFIX, "").trim();
+      if (parts.length > 0 && sectionText) {
         parts[parts.length - 1].sections.push({
           title: sectionText,
           startPage: 0,
@@ -133,6 +154,9 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
       }
       continue;
     }
+
+    // 2. 숫자 챕터.
+    const numMatch = line.match(/^(\d+)\.\s+(.+)$/);
     if (numMatch) {
       index++;
       parts.push({
@@ -145,29 +169,63 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
       });
       continue;
     }
-    const labelMatch = line.match(
-      /^(서문|서론|프롤로그|에필로그|머리말|맺음말|들어가며|나오며|감사의 글|감사의말|감사의\s*글|추천사|추천의\s*글|주석|주|부록|참고문헌|옮긴이의?\s*말|옮긴이\s*후기|번역과\s*관련하여|후기|개정판\s*서문|독자에게|저자의\s*말|들어가는\s*글)\s*(.*)$/,
-    );
-    index++;
-    if (labelMatch) {
-      parts.push({
-        index,
-        label: labelMatch[1].trim(),
-        title: labelMatch[2].trim() || labelMatch[1].trim(),
+
+    // 3. 에피그래프 — 직전 챕터 섹션 병합.
+    if (isEpigraph(line) && parts.length > 0) {
+      const clean = line
+        .replace(QUOTE_PREFIX, "")
+        .replace(/[""''""]+\s*$/, "")
+        .trim();
+      parts[parts.length - 1].sections.push({
+        title: clean || line,
         startPage: 0,
         endPage: 0,
-        sections: [],
       });
-    } else {
-      parts.push({
-        index,
-        label: "",
-        title: line,
-        startPage: 0,
-        endPage: 0,
-        sections: [],
-      });
+      continue;
     }
+
+    // 4. "제N부 X".
+    const buMatch = line.match(BU_PATTERN);
+    if (buMatch) {
+      index++;
+      parts.push({
+        index,
+        label: buMatch[1].replace(/\s+/g, " ").trim(),
+        title: buMatch[2].trim(),
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      });
+      continue;
+    }
+
+    // 5. 알려진 라벨.
+    const labelMatch = line.match(LABEL_PATTERN);
+    if (labelMatch) {
+      index++;
+      const label = labelMatch[1].replace(/\s+/g, " ").trim();
+      const rest = labelMatch[2].trim();
+      parts.push({
+        index,
+        label: rest ? label : "",
+        title: rest || label,
+        startPage: 0,
+        endPage: 0,
+        sections: [],
+      });
+      continue;
+    }
+
+    // 6. 기타 — 독립 PART.
+    index++;
+    parts.push({
+      index,
+      label: "",
+      title: line,
+      startPage: 0,
+      endPage: 0,
+      sections: [],
+    });
   }
 
   const total = totalPages ?? 0;

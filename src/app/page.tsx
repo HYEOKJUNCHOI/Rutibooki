@@ -9,12 +9,14 @@ import { useNickname } from "@/hooks/useNickname";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import LibraryCard from "@/components/library/LibraryCard";
 import BookActionSheet from "@/components/library/BookActionSheet";
-import TocUploadModal from "@/components/library/TocUploadModal";
 import BarcodeScanner from "@/components/register/BarcodeScanner";
 import RegisterModePicker from "@/components/register/RegisterModePicker";
+import ConfirmCoverSheet, {
+  ConfirmData,
+} from "@/components/register/ConfirmCoverSheet";
 import { Book } from "@/types/book";
 import { normalizeAuthor } from "@/utils/normalizeAuthor";
-import { updateTocForExistingBook } from "@/lib/registerBookInBackground";
+import { startBackgroundRegistration } from "@/lib/registerBookInBackground";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
@@ -31,22 +33,20 @@ export default function LibraryHome() {
   const hydrated = useBooksStore((s) => s.hydrated);
 
   const registered = useBooksStore((s) => s.registered);
+  const addBook = useBooksStore((s) => s.addBook);
   const removeBook = useBooksStore((s) => s.removeBook);
-  const updateBook = useBooksStore((s) => s.updateBook);
   const statesByBook = useReadingStore((s) => s.statesByBook);
 
   // FAB(+) → 2지선다 시트 (바코드/직접입력).
   const [pickerOpen, setPickerOpen] = useState(false);
-  // 바코드 신규 등록 스캔 모드 — rescan 과 별개 상태로 두어 핸들러 분리.
+  // 바코드 신규 등록 스캔 모드.
   const [newScan, setNewScan] = useState(false);
+  // 바코드 성공 후 "이 책 맞나요?" 확인 시트 데이터 — null 이면 닫힘.
+  const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // 길게눌러 뜨는 액션 시트.
+  // 길게눌러 뜨는 액션 시트 — [2026-04-22] 삭제 전용으로 축소.
   const [sheetBook, setSheetBook] = useState<Book | null>(null);
-  // 바코드 재스캔 모드 — 이 값이 set 되면 스캐너 오버레이 뜨고, 인식되면 해당 책 메타만 갱신.
-  const [rescanBook, setRescanBook] = useState<Book | null>(null);
-  const [rescanBusy, setRescanBusy] = useState(false);
-  // 목차 업로드 모달 — 3장까지 선택받아 기존 책 parts 덮어쓰기.
-  const [tocUploadBook, setTocUploadBook] = useState<Book | null>(null);
   const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
   // 서재 = 등록된 책 그대로.
@@ -80,6 +80,62 @@ export default function LibraryHome() {
   }, [sortedBooks]);
 
   const titleText = nickname ? `${nickname}의 서재` : "나의 서재";
+
+  // 바코드 → 알라딘 메타 조회 → 확인 시트 오픈.
+  const handleBarcodeDetected = async (isbn13: string) => {
+    setNewScan(false);
+    setConfirmLoading(true);
+    setConfirmData({ isbn13, title: "", author: "" }); // 시트는 즉시 로딩 상태로 띄움
+    try {
+      const r = await fetch(
+        `/api/fetch-toc?isbn=${encodeURIComponent(isbn13)}`,
+      );
+      if (!r.ok) throw new Error("fetch_fail");
+      const data = await r.json();
+      if (data.error === "no_match" || !data.title) {
+        alert("알라딘에서 이 ISBN 을 못 찾았어요 — 다른 책으로 시도해주세요");
+        setConfirmData(null);
+        return;
+      }
+      setConfirmData({
+        isbn13: data.isbn13 || isbn13,
+        title: data.title,
+        author: normalizeAuthor(data.author || ""),
+        cover: data.cover,
+        publisher: data.publisher,
+        itemPage: data.itemPage,
+      });
+    } catch (e) {
+      console.warn("[home] aladin lookup fail", e);
+      alert("책 정보 조회 실패 — 네트워크 확인 후 다시 시도해주세요");
+      setConfirmData(null);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  // 확인 → 즉시 shell 등록 + 백그라운드 목차 파이프라인.
+  const handleConfirmRegister = async () => {
+    if (!confirmData) return;
+    const id = `book-${Date.now()}`;
+    const shell: Book = {
+      id,
+      title: confirmData.title || "분석 중…",
+      author: confirmData.author,
+      searchQuery: confirmData.isbn13,
+      totalPages: confirmData.itemPage ?? 0,
+      parts: [],
+      registeredAt: new Date().toISOString(),
+      status: "extracting",
+      isbn13: confirmData.isbn13,
+    };
+    if (confirmData.cover) shell.coverUrl = confirmData.cover;
+    if (confirmData.publisher) shell.publisher = confirmData.publisher;
+
+    setConfirmData(null);
+    await addBook(shell);
+    startBackgroundRegistration({ shellId: id, isbn13: confirmData.isbn13 });
+  };
 
   return (
     <main
@@ -172,7 +228,6 @@ export default function LibraryHome() {
                             id: book.id,
                             title: book.title,
                             href: `/book/${book.id}`,
-                            encoded: `/book/${encodeURIComponent(book.id)}`,
                           });
                           router.push(`/book/${book.id}`);
                         }}
@@ -239,13 +294,20 @@ export default function LibraryHome() {
       {newScan && (
         <BarcodeScanner
           onClose={() => setNewScan(false)}
-          onDetect={(isbn13) => {
-            setNewScan(false);
-            // 등록 페이지로 ISBN 실어 보냄 → 페이지가 마운트 시 알라딘 조회 자동 실행.
-            router.push(`/register?isbn=${encodeURIComponent(isbn13)}`);
-          }}
+          onDetect={handleBarcodeDetected}
         />
       )}
+
+      <ConfirmCoverSheet
+        data={confirmData}
+        loading={confirmLoading}
+        onClose={() => setConfirmData(null)}
+        onConfirm={handleConfirmRegister}
+        onRetry={() => {
+          setConfirmData(null);
+          setNewScan(true);
+        }}
+      />
 
       <BookActionSheet
         book={sheetBook}
@@ -253,69 +315,7 @@ export default function LibraryHome() {
         onDelete={async (b) => {
           await removeBook(b.id);
         }}
-        onRescanBarcode={(b) => {
-          setSheetBook(null);
-          setRescanBook(b);
-        }}
-        onUpdateTocOpen={(b) => {
-          setSheetBook(null);
-          setTocUploadBook(b);
-        }}
       />
-
-      {tocUploadBook && (
-        <TocUploadModal
-          book={tocUploadBook}
-          onClose={() => setTocUploadBook(null)}
-          onConfirm={async () => {
-            // [2026-04-22] 사진 업로드 경로 폐기. ISBN 기반 교보 재시도만 남김.
-            const target = tocUploadBook;
-            setTocUploadBook(null);
-            if (!target.isbn13) {
-              alert("이 책은 ISBN 이 없어 목차를 다시 가져올 수 없습니다");
-              return;
-            }
-            const ok = await updateTocForExistingBook(target.id, target.isbn13);
-            if (!ok) alert("교보에 목차가 없어요 — 다른 책으로 시도하거나 나중에 다시 시도해주세요");
-          }}
-        />
-      )}
-
-      {rescanBook && (
-        <BarcodeScanner
-          onClose={() => {
-            setRescanBook(null);
-            setRescanBusy(false);
-          }}
-          onDetect={async (isbn13) => {
-            if (rescanBusy) return;
-            setRescanBusy(true);
-            try {
-              const r = await fetch(
-                `/api/fetch-toc?isbn=${encodeURIComponent(isbn13)}`,
-              );
-              if (!r.ok) throw new Error("fetch_toc_failed");
-              const data = await r.json();
-              if (data.error === "no_match" || !data.title) {
-                throw new Error("no_match");
-              }
-              // 목차(parts/totalPages) 는 건드리지 않음 — 메타만 덮어쓰기.
-              const patch: Partial<Book> = { title: data.title };
-              if (data.author) patch.author = normalizeAuthor(data.author);
-              if (data.publisher) patch.publisher = data.publisher;
-              if (data.cover) patch.coverUrl = data.cover;
-              if (data.category) patch.category = data.category;
-              await updateBook(rescanBook.id, patch);
-            } catch (e) {
-              console.warn("[rescan] fail", e);
-              alert("바코드 메타 업데이트 실패 — 다시 시도해주세요");
-            } finally {
-              setRescanBook(null);
-              setRescanBusy(false);
-            }
-          }}
-        />
-      )}
     </main>
   );
 }

@@ -4,25 +4,15 @@ import { useEffect, useState } from "react";
 import { Book } from "@/types/book";
 
 // 서재 카드 길게눌러 뜨는 액션 시트.
-// "편집" 은 아직 등록 페이지에 edit 모드가 없어서 비활성(곧 지원) — 삭제만 우선.
+// [2026-04-22] 삭제 외 기능(목차 재등록/바코드 메타 업데이트) 전부 제거 — 롱프레스는 삭제 전용.
 
 interface Props {
   book: Book | null;
   onClose: () => void;
   onDelete: (book: Book) => Promise<void> | void;
-  // 목차 3장 업로드 모달 열기 — 실제 확정은 부모에서 처리.
-  onUpdateTocOpen?: (book: Book) => void;
-  // 바코드 재스캔으로 메타만 덮어쓰기 — 목차 보존.
-  onRescanBarcode?: (book: Book) => void;
 }
 
-export default function BookActionSheet({
-  book,
-  onClose,
-  onDelete,
-  onUpdateTocOpen,
-  onRescanBarcode,
-}: Props) {
+export default function BookActionSheet({ book, onClose, onDelete }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -78,7 +68,7 @@ export default function BookActionSheet({
           animation: "sheet-rise 180ms ease-out",
         }}
       >
-        {/* 상단 책 요약 — 누구를 지우/편집하려는지 혼동 방지. */}
+        {/* 상단 책 요약 — 누구를 지우려는지 혼동 방지. */}
         <div
           style={{
             padding: "12px 8px 14px",
@@ -123,24 +113,6 @@ export default function BookActionSheet({
           )}
         </div>
 
-        {onUpdateTocOpen && (
-          <SheetButton
-            label={
-              book.parts && book.parts.length > 1
-                ? "목차 다시 등록"
-                : "목차 등록"
-            }
-            sub="사진 3장까지"
-            onClick={() => onUpdateTocOpen(book)}
-          />
-        )}
-        {onRescanBarcode && (
-          <SheetButton
-            label="바코드로 메타 업데이트"
-            sub="목차 유지"
-            onClick={() => onRescanBarcode(book)}
-          />
-        )}
         <SheetButton
           label={
             deleting
@@ -168,14 +140,12 @@ export default function BookActionSheet({
 
 function SheetButton({
   label,
-  sub,
   onClick,
   danger,
   muted,
   disabled,
 }: {
   label: string;
-  sub?: string;
   onClick: () => void;
   danger?: boolean;
   muted?: boolean;
@@ -199,15 +169,9 @@ function SheetButton({
         fontFamily: "inherit",
         textAlign: "left",
         opacity: disabled ? 0.45 : 1,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
       }}
     >
-      <span>{label}</span>
-      {sub && (
-        <span style={{ fontSize: 11, color: "#5A5A5A" }}>{sub}</span>
-      )}
+      {label}
     </button>
   );
 }

@@ -131,8 +131,9 @@ export default function BookDetailPage({
     );
   }
 
+  // [2026-04-22] 책 펼쳤어요 이후 플로우 전면 재설계 중 — 버튼은 유지하되 무반응.
   const handleOpenBook = () => {
-    router.push(`/read?bookId=${selectedBook.id}`);
+    // no-op
   };
 
   return (

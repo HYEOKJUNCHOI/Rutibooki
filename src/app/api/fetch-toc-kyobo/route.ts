@@ -27,11 +27,17 @@ export async function POST(req: NextRequest) {
 
   // 프록시 모드 — 설정돼 있으면 전부 위임.
   const proxyUrl = process.env.KYOBO_PROXY_URL;
+  const proxyToken = process.env.KYOBO_PROXY_TOKEN;
   if (proxyUrl) {
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      // 토큰 등록돼 있으면 헤더에 실어 보냄 — 프록시의 x-proxy-token 검증과 대응.
+      if (proxyToken) headers["x-proxy-token"] = proxyToken;
       const r = await fetch(proxyUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           isbn13: body.isbn13,
           totalPages: body.totalPages ?? 0,

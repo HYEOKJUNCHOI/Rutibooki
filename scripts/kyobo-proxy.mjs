@@ -10,6 +10,7 @@
 // (공용 로직을 두 곳에 두는 건 번거롭지만, 프록시는 tsx/빌드 없이 돌리는 게 우선.)
 
 import http from "node:http";
+import { spawn } from "node:child_process";
 
 const BASE_BROWSER_HEADERS = {
   "User-Agent":
@@ -278,6 +279,9 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
 
 // ── HTTP 서버 ──────────────────────────────────────────────
 const PORT = Number(process.env.KYOBO_PROXY_PORT) || 5678;
+// 공유 시크릿 — Vercel 라우트가 x-proxy-token 헤더로 같은 값 보낼 때만 통과.
+// 미설정이면 경고만 찍고 인증 생략 (로컬 개발용 fallback).
+const PROXY_TOKEN = process.env.KYOBO_PROXY_TOKEN || "";
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -319,6 +323,15 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 405, { error: "method_not_allowed" });
   }
 
+  // 시크릿 토큰 검사 — 설정돼 있을 때만.
+  if (PROXY_TOKEN) {
+    const got = req.headers["x-proxy-token"];
+    if (got !== PROXY_TOKEN) {
+      console.warn("[kyobo-proxy] ✗ bad token from", req.socket.remoteAddress);
+      return sendJson(res, 401, { error: "unauthorized" });
+    }
+  }
+
   let body;
   try {
     body = await readJsonBody(req);
@@ -346,5 +359,68 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[kyobo-proxy] listening on :${PORT}`);
+  if (PROXY_TOKEN) {
+    console.log(`[kyobo-proxy] 🔒 token auth enabled (len=${PROXY_TOKEN.length})`);
+  } else {
+    console.warn("[kyobo-proxy] ⚠ KYOBO_PROXY_TOKEN 미설정 — 인증 없음");
+  }
   console.log(`[kyobo-proxy] test: curl -X POST http://localhost:${PORT} -H "Content-Type: application/json" -d '{"isbn13":"9788934972464"}'`);
+  startNgrok();
 });
+
+// ── ngrok 자식 프로세스 ─────────────────────────────────────
+// KYOBO_NGROK_DOMAIN 이 박혀 있으면 ngrok 도 여기서 같이 띄움 — 터미널 하나로 끝.
+// 없으면 순수 프록시만 돌고 사용자가 별도 창에서 ngrok 띄우는 모드.
+function startNgrok() {
+  const domain = process.env.KYOBO_NGROK_DOMAIN;
+  if (!domain) {
+    console.log("[ngrok] KYOBO_NGROK_DOMAIN 미설정 — ngrok 자동 기동 생략.");
+    return;
+  }
+
+  // Windows 는 shell:true 필요 (ngrok.exe / ngrok.cmd 모두 PATH 경유 해석).
+  const child = spawn("ngrok", ["http", `--domain=${domain}`, String(PORT)], {
+    shell: process.platform === "win32",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const prefix = "[ngrok]";
+  const relay = (stream) => {
+    let buf = "";
+    stream.on("data", (chunk) => {
+      buf += chunk.toString("utf8");
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).replace(/\r$/, "");
+        buf = buf.slice(nl + 1);
+        if (line.trim()) console.log(`${prefix} ${line}`);
+      }
+    });
+  };
+  relay(child.stdout);
+  relay(child.stderr);
+
+  child.on("exit", (code) => {
+    console.error(`${prefix} exited code=${code} — 프록시도 종료합니다.`);
+    process.exit(code ?? 1);
+  });
+  child.on("error", (e) => {
+    console.error(`${prefix} spawn error`, e.message);
+  });
+
+  // 프록시 먼저 죽으면 ngrok 도 같이 정리.
+  const killChild = () => {
+    if (!child.killed) child.kill();
+  };
+  process.on("SIGINT", () => {
+    killChild();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    killChild();
+    process.exit(0);
+  });
+  process.on("exit", killChild);
+
+  console.log(`[ngrok] spawning with --domain=${domain} → :${PORT}`);
+}

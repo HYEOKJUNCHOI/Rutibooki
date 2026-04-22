@@ -331,9 +331,11 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
                 pattern="[0-9]*"
                 value={manualIsbn}
                 onChange={(e) => {
-                  setManualIsbn(e.target.value);
+                  // [2026-04-22] 978-89-... 식으로 하이픈 붙여 적어도 OK — 숫자만 남김.
+                  setManualIsbn(e.target.value.replace(/\D/g, ""));
                   if (manualError) setManualError(null);
                 }}
+                maxLength={13}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") submitManual();
                 }}

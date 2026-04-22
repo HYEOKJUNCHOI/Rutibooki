@@ -217,20 +217,46 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
                 objectFit: "cover",
               }}
             />
+            {/* 뷰파인더 영역 — 주변 어둡게, 중앙은 투명. */}
             <div
               style={{
                 position: "absolute",
-                left: "10%",
-                right: "10%",
-                top: "40%",
-                bottom: "40%",
-                border: "2px solid #00FF7A",
-                borderRadius: 8,
-                boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
+                left: "8%",
+                right: "8%",
+                top: "32%",
+                bottom: "32%",
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
+                borderRadius: 10,
                 pointerEvents: "none",
               }}
-            />
+            >
+              {/* 네 모서리 브래킷 — 스캐너 느낌. */}
+              <span style={cornerStyle("tl")} />
+              <span style={cornerStyle("tr")} />
+              <span style={cornerStyle("bl")} />
+              <span style={cornerStyle("br")} />
+              {/* 왕복하는 빨간 스캔 라인 — 글로우 있음. */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  right: 12,
+                  height: 2,
+                  background: "#FF3A4B",
+                  borderRadius: 2,
+                  boxShadow: "0 0 12px 2px rgba(255,58,75,0.7)",
+                  animation: "scan-sweep 1.6s ease-in-out infinite",
+                }}
+              />
+            </div>
           </div>
+          <style>{`
+            @keyframes scan-sweep {
+              0%   { top: 0; }
+              50%  { top: calc(100% - 2px); }
+              100% { top: 0; }
+            }
+          `}</style>
           <div
             style={{
               marginTop: 16,
@@ -256,4 +282,25 @@ export default function BarcodeScanner({ onDetect, onClose }: Props) {
       )}
     </div>
   );
+}
+
+// 뷰파인더 네 모서리 브래킷 — 스캐너 특유의 ㄱㄴ 마크.
+function cornerStyle(
+  pos: "tl" | "tr" | "bl" | "br",
+): React.CSSProperties {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    width: 22,
+    height: 22,
+    borderColor: "#FFFFFF",
+    borderStyle: "solid",
+    borderWidth: 0,
+  };
+  const corners: Record<typeof pos, React.CSSProperties> = {
+    tl: { top: -1, left: -1, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 },
+    tr: { top: -1, right: -1, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 },
+    bl: { bottom: -1, left: -1, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 10 },
+    br: { bottom: -1, right: -1, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 10 },
+  };
+  return { ...base, ...corners[pos] };
 }

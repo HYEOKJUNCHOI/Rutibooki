@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import PhoneFrame from "@/components/layout/PhoneFrame";
 import ReviewForm from "@/components/register/ReviewForm";
 import { useRegisterFlow } from "@/hooks/useRegisterFlow";
@@ -11,7 +12,16 @@ import { useRegisterFlow } from "@/hooks/useRegisterFlow";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const flow = useRegisterFlow();
+  // 홈에서 바코드 스캔 성공 시 ?isbn=XXX 쿼리로 진입 — 한 번만 자동 조회.
+  const didLookupRef = useRef(false);
+  useEffect(() => {
+    const isbn = searchParams.get("isbn");
+    if (!isbn || didLookupRef.current) return;
+    didLookupRef.current = true;
+    flow.lookupByIsbn(isbn);
+  }, [searchParams, flow]);
 
   return (
     <main

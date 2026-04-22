@@ -11,6 +11,7 @@ import LibraryCard from "@/components/library/LibraryCard";
 import BookActionSheet from "@/components/library/BookActionSheet";
 import TocUploadModal from "@/components/library/TocUploadModal";
 import BarcodeScanner from "@/components/register/BarcodeScanner";
+import RegisterModePicker from "@/components/register/RegisterModePicker";
 import { Book } from "@/types/book";
 import { normalizeAuthor } from "@/utils/normalizeAuthor";
 import { updateTocForExistingBook } from "@/lib/registerBookInBackground";
@@ -33,6 +34,11 @@ export default function LibraryHome() {
   const removeBook = useBooksStore((s) => s.removeBook);
   const updateBook = useBooksStore((s) => s.updateBook);
   const statesByBook = useReadingStore((s) => s.statesByBook);
+
+  // FAB(+) → 2지선다 시트 (바코드/직접입력).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // 바코드 신규 등록 스캔 모드 — rescan 과 별개 상태로 두어 핸들러 분리.
+  const [newScan, setNewScan] = useState(false);
 
   // 길게눌러 뜨는 액션 시트.
   const [sheetBook, setSheetBook] = useState<Book | null>(null);
@@ -194,7 +200,7 @@ export default function LibraryHome() {
 
         {/* FAB — 책 등록. 헌법상 강한 색은 액션 트리거에만. */}
         <button
-          onClick={() => router.push("/register")}
+          onClick={() => setPickerOpen(true)}
           aria-label="책 등록"
           style={{
             position: "absolute",
@@ -216,6 +222,30 @@ export default function LibraryHome() {
           +
         </button>
       </PhoneFrame>
+
+      <RegisterModePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPickBarcode={() => {
+          setPickerOpen(false);
+          setNewScan(true);
+        }}
+        onPickManual={() => {
+          setPickerOpen(false);
+          router.push("/register");
+        }}
+      />
+
+      {newScan && (
+        <BarcodeScanner
+          onClose={() => setNewScan(false)}
+          onDetect={(isbn13) => {
+            setNewScan(false);
+            // 등록 페이지로 ISBN 실어 보냄 → 페이지가 마운트 시 알라딘 조회 자동 실행.
+            router.push(`/register?isbn=${encodeURIComponent(isbn13)}`);
+          }}
+        />
+      )}
 
       <BookActionSheet
         book={sheetBook}

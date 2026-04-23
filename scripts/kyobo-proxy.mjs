@@ -121,6 +121,8 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
   // 파서 — src/lib/kyoboScraper.ts 와 동기화. 원본 주석 참조.
   const parts = [];
   const lines = tocText.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  // [2026-04-22] AI 하이브리드 파서 프로토타입용 — 파서 진입 전 줄 배열을 응답에 포함.
+  const rawLines = lines.slice();
 
   const QUOTE_PREFIX = /^[""''""‹›«»„‚"'„‟""‹›]/;
   const DASH_PREFIX = /^[-‐‑‒–—―]\s*/;
@@ -366,7 +368,7 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
   }
 
   if (parts.length === 0) {
-    return { unknown: true, parts: [], totalPages: total, productCode };
+    return { unknown: true, parts: [], totalPages: total, productCode, rawLines };
   }
   return {
     unknown: false,
@@ -374,6 +376,7 @@ async function scrapeKyoboToc(isbn13, totalPages = 0) {
     totalPages: total,
     source: "kyobo",
     productCode,
+    rawLines,
   };
 }
 

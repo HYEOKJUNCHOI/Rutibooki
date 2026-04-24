@@ -173,53 +173,63 @@ export default function ScanTestPage() {
     setError(null);
   };
 
+  const capturing = step !== "done";
+
   return (
     <div
       style={{
         maxWidth: 1000,
         margin: "0 auto",
-        padding: 24,
+        // 상단 safe-area — iOS 노치/다이내믹 아일랜드 회피.
+        padding: "max(env(safe-area-inset-top, 0px), 12px) 14px 24px",
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>📷 문서 스캔 테스트</h1>
-      <p style={{ color: "#666", fontSize: 13, marginBottom: 20 }}>
-        책 펼침면을 한 페이지씩 찍으면 자동으로 가장자리 검출해서 반듯하게 펴줍니다.
-      </p>
+      {/* 촬영 단계에선 제목·설명 숨김. 결과 단계에서만 작게 노출. */}
+      {!capturing && (
+        <>
+          <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>📷 문서 스캔 테스트</h1>
+          <p style={{ color: "#666", fontSize: 12, marginBottom: 14 }}>
+            자동 가장자리 검출 + 원근 보정. OCR 엔진 골라서 바로 비교.
+          </p>
+        </>
+      )}
 
-      {/* 엔진 선택 */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 16,
-          padding: 4,
-          background: "#f3f3f3",
-          borderRadius: 8,
-          width: "fit-content",
-        }}
-      >
-        {(["vision", "paddle"] as Engine[]).map((e) => (
-          <button
-            key={e}
-            onClick={() => setEngine(e)}
-            style={{
-              padding: "8px 14px",
-              background: engine === e ? "#222" : "transparent",
-              color: engine === e ? "#fff" : "#555",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {e === "vision" ? "☁️ Vision" : "🖥️ Paddle"}
-          </button>
-        ))}
-      </div>
+      {/* 엔진 선택 — OCR 돌리기 직전에만 필요하므로 결과 단계에서만 */}
+      {!capturing && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 14,
+            padding: 4,
+            background: "#f3f3f3",
+            borderRadius: 8,
+            width: "fit-content",
+          }}
+        >
+          {(["vision", "paddle"] as Engine[]).map((e) => (
+            <button
+              key={e}
+              onClick={() => setEngine(e)}
+              style={{
+                padding: "8px 14px",
+                background: engine === e ? "#222" : "transparent",
+                color: engine === e ? "#fff" : "#555",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {e === "vision" ? "☁️ Vision" : "🖥️ Paddle"}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* 스텝 인디케이터 */}
+      {/* 스텝 인디케이터 — 항상 노출 */}
       <Stepper step={step} hasLeft={!!leftPage} hasRight={!!rightPage} />
 
       {cameraError && (
@@ -405,9 +415,20 @@ function CameraPanel({
 }) {
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
-        <span style={{ fontSize: 12, color: "#666" }}>{hint}</span>
+      {/* 한 줄로 압축 — 스텝 + 짧은 힌트 (폰 화면 높이 절약) */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: 10,
+          marginBottom: 6,
+          fontSize: 12,
+        }}
+      >
+        <span style={{ fontWeight: 700 }}>{label}</span>
+        <span style={{ color: "#888", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {hint}
+        </span>
       </div>
 
       {/*

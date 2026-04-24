@@ -117,12 +117,24 @@ export async function scanDocument(
   try {
     // jscanify API: extractPaper(source, targetWidth, targetHeight)
     resultCanvas = scanner.extractPaper(srcCanvas, outW, outH);
+    // 감지가 부분 실패하면 0×0 이나 비정상 canvas 가 나와서 toBlob 이 null 을 뱉음.
+    // 사이즈 체크로 명시적 fallback.
+    if (!resultCanvas || !resultCanvas.width || !resultCanvas.height) {
+      resultCanvas = srcCanvas;
+    }
   } catch {
     // 감지 실패 — 원본 그대로
     resultCanvas = srcCanvas;
   }
 
-  const blob = await canvasToBlob(resultCanvas, "image/jpeg", opts?.quality ?? 0.92);
+  let blob: Blob;
+  try {
+    blob = await canvasToBlob(resultCanvas, "image/jpeg", opts?.quality ?? 0.92);
+  } catch {
+    // 마지막 안전망 — 변형 canvas 가 tainted/0-size 여도 원본에서 다시 시도.
+    blob = await canvasToBlob(srcCanvas, "image/jpeg", opts?.quality ?? 0.92);
+    resultCanvas = srcCanvas;
+  }
   return { blob, width: resultCanvas.width, height: resultCanvas.height };
 }
 

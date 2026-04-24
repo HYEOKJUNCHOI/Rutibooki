@@ -423,7 +423,9 @@ function CameraPanel({
           borderRadius: 8,
           overflow: "hidden",
           aspectRatio: "3 / 4",
-          maxWidth: 480,
+          // 폰 세로 화면 가득 채우지 않게 — 뷰포트 높이의 62% 상한.
+          maxHeight: "62vh",
+          maxWidth: 360,
           margin: "0 auto",
         }}
       >

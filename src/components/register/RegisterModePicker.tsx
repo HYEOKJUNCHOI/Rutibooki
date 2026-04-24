@@ -104,6 +104,27 @@ export default function RegisterModePicker({
           <div style={chevronStyle}>›</div>
         </button>
 
+        {/* 임시 — 폰 카메라 + jscanify 스캔 테스트 경로. 본 기능에선 제거 예정. */}
+        <button
+          onClick={() => {
+            window.location.href = "/dev/scan-test";
+          }}
+          style={{
+            ...secondaryCardStyle,
+            marginTop: 10,
+            marginBottom: 6,
+            border: "1px dashed #FF9F43",
+            background: "#1A1410",
+          }}
+        >
+          <div style={{ fontSize: 28 }}>🧪</div>
+          <div style={{ flex: 1, textAlign: "left" }}>
+            <div style={{ ...cardTitle, color: "#FFB169" }}>스캔 테스트 (임시)</div>
+            <div style={cardSub}>인앱 카메라 + 자동 크롭 실험</div>
+          </div>
+          <div style={chevronStyle}>›</div>
+        </button>
+
         <button onClick={onClose} style={cancelStyle}>
           취소
         </button>

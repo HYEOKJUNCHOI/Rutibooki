@@ -594,7 +594,7 @@ function CameraPanel({
               bottom: "3%",
               left: "16%",
               right: "16%",
-              border: "3px solid #FF3B30",
+              border: "3px solid #00FF7A",
               borderRadius: 4,
               pointerEvents: "none",
               boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",

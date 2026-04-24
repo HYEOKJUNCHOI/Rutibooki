@@ -39,11 +39,31 @@ export default function ScanTestPage() {
   const [ocrResult, setOcrResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 카메라 시작 — 후면카메라 우선 (모바일), 데스크탑은 기본캠
+  // 카메라 시작 — 후면카메라 우선 (모바일), 데스크탑은 기본캠.
+  // step 이 촬영 단계(left/right)로 돌아올 때마다 실행 — 다시 찍기 시 video 요소가
+  // 새로 마운트되기 때문에 srcObject 재연결이 필요함.
   useEffect(() => {
+    if (step === "done") return;
     let aborted = false;
+
+    const attach = async (stream: MediaStream) => {
+      if (aborted || !videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      try {
+        await videoRef.current.play();
+      } catch {
+        // iOS 가 autoplay 막아도 muted + playsInline 이면 대개 OK. 실패해도 화면은 뜸.
+      }
+      setCameraReady(true);
+    };
+
     (async () => {
       try {
+        // 기존 stream 재활용 — 권한 다이얼로그 재노출 방지 + 지연 0.
+        if (streamRef.current && streamRef.current.active) {
+          await attach(streamRef.current);
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
@@ -57,17 +77,20 @@ export default function ScanTestPage() {
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setCameraReady(true);
-        }
+        await attach(stream);
       } catch (e) {
         setCameraError(e instanceof Error ? e.message : "camera_failed");
       }
     })();
+
     return () => {
       aborted = true;
+    };
+  }, [step]);
+
+  // 페이지 언마운트 시에만 stream 정리 — step 바뀔 때는 유지.
+  useEffect(() => {
+    return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };

@@ -96,27 +96,58 @@ export default function ScanTestPage() {
     };
   }, []);
 
-  // 셔터 — 비디오 프레임 → canvas → jscanify → blob
+  // 셔터 — 비디오 프레임에서 빨간 가이드 프레임 영역만 크롭해 blob 생성.
+  //
+  // jscanify 자동 엣지 감지는 책 페이지(손가락/본체 그림자) 에서 오검출이 잦아 제거.
+  // 사용자가 이미 빨간 박스에 맞춰 찍고 있으므로, 그 박스 안을 그대로 잘라내는 게 정확.
   const shoot = useCallback(async () => {
     if (!videoRef.current || busy) return;
     setBusy(true);
     setError(null);
     try {
       const video = videoRef.current;
+      const container = video.parentElement as HTMLElement | null;
+      if (!container) throw new Error("container_null");
+
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) throw new Error("video_not_ready");
+
+      // object-fit: cover 환산 — 컨테이너를 덮는 최대 스케일, 바깥은 잘림.
+      const scale = Math.max(cw / vw, ch / vh);
+      const displayedW = vw * scale;
+      const displayedH = vh * scale;
+      const offsetX = (displayedW - cw) / 2;
+      const offsetY = (displayedH - ch) / 2;
+
+      // 가이드 프레임(컨테이너 기준 %) → 영상 원본 픽셀 좌표로 역매핑.
+      const guide = { topPct: 0.03, bottomPct: 0.03, leftPct: 0.16, rightPct: 0.16 };
+      const gLeft = cw * guide.leftPct;
+      const gTop = ch * guide.topPct;
+      const gW = cw * (1 - guide.leftPct - guide.rightPct);
+      const gH = ch * (1 - guide.topPct - guide.bottomPct);
+
+      const srcX = (gLeft + offsetX) / scale;
+      const srcY = (gTop + offsetY) / scale;
+      const srcW = gW / scale;
+      const srcH = gH / scale;
+
       const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = Math.round(srcW);
+      canvas.height = Math.round(srcH);
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("canvas_ctx_null");
-      ctx.drawImage(video, 0, 0);
+      ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
 
-      // 동적 import — /dev/scan-test 들어올 때만 OpenCV.js 3MB 로드
-      const { scanDocument } = await import("@/lib/docScan");
-      const result = await scanDocument(canvas);
+      const blob: Blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("blob_null"))), "image/jpeg", 0.92);
+      });
 
       const capture: PageCapture = {
-        blob: result.blob,
-        previewUrl: URL.createObjectURL(result.blob),
+        blob,
+        previewUrl: URL.createObjectURL(blob),
       };
 
       if (step === "left") {

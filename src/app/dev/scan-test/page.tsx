@@ -9,6 +9,7 @@
 // 3) 좌/우 펼침면을 한 장에 찍지 말고 한 페이지씩 2스텝으로
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import CropEditor from "@/components/scan/CropEditor";
 
 type Step = "left" | "right" | "done";
 type Engine = "vision" | "paddle";
@@ -16,6 +17,17 @@ type Engine = "vision" | "paddle";
 interface PageCapture {
   blob: Blob;
   previewUrl: string;
+}
+
+interface PendingRaw {
+  canvas: HTMLCanvasElement;
+  // [tl, tr, br, bl] — source 픽셀 좌표계, 가이드 박스 초기 위치
+  initialCorners: [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ];
 }
 
 interface OcrResponse {
@@ -38,6 +50,8 @@ export default function ScanTestPage() {
   const [engine, setEngine] = useState<Engine>("vision");
   const [ocrResult, setOcrResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 셔터 직후 크롭 에디터에 넘길 원본 프레임 + 초기 꼭짓점.
+  const [pendingRaw, setPendingRaw] = useState<PendingRaw | null>(null);
 
   // 카메라 시작 — 후면카메라 우선 (모바일), 데스크탑은 기본캠.
   // step 이 촬영 단계(left/right)로 돌아올 때마다 실행 — 다시 찍기 시 video 요소가
@@ -96,10 +110,8 @@ export default function ScanTestPage() {
     };
   }, []);
 
-  // 셔터 — 비디오 프레임에서 빨간 가이드 프레임 영역만 크롭해 blob 생성.
-  //
-  // jscanify 자동 엣지 감지는 책 페이지(손가락/본체 그림자) 에서 오검출이 잦아 제거.
-  // 사용자가 이미 빨간 박스에 맞춰 찍고 있으므로, 그 박스 안을 그대로 잘라내는 게 정확.
+  // 셔터 — 비디오 풀프레임을 canvas 로 캡처하고 CropEditor 띄움.
+  // 가이드 박스는 초기 꼭짓점 위치로만 사용 (source 픽셀 좌표로 역매핑).
   const shoot = useCallback(async () => {
     if (!videoRef.current || busy) return;
     setBusy(true);
@@ -115,41 +127,55 @@ export default function ScanTestPage() {
       const vh = video.videoHeight;
       if (!vw || !vh) throw new Error("video_not_ready");
 
-      // object-fit: cover 환산 — 컨테이너를 덮는 최대 스케일, 바깥은 잘림.
+      // object-fit: cover 역매핑 — 가이드 박스 4 꼭짓점을 원본 픽셀 좌표로.
       const scale = Math.max(cw / vw, ch / vh);
       const displayedW = vw * scale;
       const displayedH = vh * scale;
       const offsetX = (displayedW - cw) / 2;
       const offsetY = (displayedH - ch) / 2;
 
-      // 가이드 프레임(컨테이너 기준 %) → 영상 원본 픽셀 좌표로 역매핑.
       const guide = { topPct: 0.03, bottomPct: 0.03, leftPct: 0.16, rightPct: 0.16 };
       const gLeft = cw * guide.leftPct;
       const gTop = ch * guide.topPct;
-      const gW = cw * (1 - guide.leftPct - guide.rightPct);
-      const gH = ch * (1 - guide.topPct - guide.bottomPct);
+      const gRight = cw * (1 - guide.rightPct);
+      const gBottom = ch * (1 - guide.bottomPct);
 
-      const srcX = (gLeft + offsetX) / scale;
-      const srcY = (gTop + offsetY) / scale;
-      const srcW = gW / scale;
-      const srcH = gH / scale;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(srcW);
-      canvas.height = Math.round(srcH);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("canvas_ctx_null");
-      ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
-
-      const blob: Blob = await new Promise((resolve, reject) => {
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("blob_null"))), "image/jpeg", 0.92);
+      const toSrc = (x: number, y: number) => ({
+        x: (x + offsetX) / scale,
+        y: (y + offsetY) / scale,
       });
 
+      // 원본 전체 프레임을 canvas 에 저장 — CropEditor 에서 꼭짓점 조정.
+      const canvas = document.createElement("canvas");
+      canvas.width = vw;
+      canvas.height = vh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas_ctx_null");
+      ctx.drawImage(video, 0, 0, vw, vh);
+
+      setPendingRaw({
+        canvas,
+        initialCorners: [
+          toSrc(gLeft, gTop),
+          toSrc(gRight, gTop),
+          toSrc(gRight, gBottom),
+          toSrc(gLeft, gBottom),
+        ],
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "shoot_failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  // CropEditor 확정 — 원근보정된 blob 을 현재 step 에 저장 + 다음 step 으로.
+  const onCropConfirm = useCallback(
+    (blob: Blob) => {
       const capture: PageCapture = {
         blob,
         previewUrl: URL.createObjectURL(blob),
       };
-
       if (step === "left") {
         if (leftPage) URL.revokeObjectURL(leftPage.previewUrl);
         setLeftPage(capture);
@@ -159,12 +185,33 @@ export default function ScanTestPage() {
         setRightPage(capture);
         setStep("done");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "shoot_failed");
-    } finally {
-      setBusy(false);
+      setPendingRaw(null);
+    },
+    [step, leftPage, rightPage],
+  );
+
+  const onCropCancel = useCallback(() => setPendingRaw(null), []);
+
+  // 뒤로가기 — 오른쪽에서 왼쪽, done 에서 오른쪽 으로 이전 step 복귀.
+  // 현재 step 의 캡처를 지우고 재촬영 모드로.
+  const goBack = useCallback(() => {
+    if (pendingRaw) {
+      setPendingRaw(null);
+      return;
     }
-  }, [busy, step, leftPage, rightPage]);
+    if (step === "right") {
+      if (leftPage) URL.revokeObjectURL(leftPage.previewUrl);
+      setLeftPage(null);
+      setStep("left");
+    } else if (step === "done") {
+      if (rightPage) URL.revokeObjectURL(rightPage.previewUrl);
+      setRightPage(null);
+      setStep("right");
+    }
+    setOcrResult(null);
+  }, [step, leftPage, rightPage, pendingRaw]);
+
+  const canGoBack = pendingRaw !== null || step === "right" || step === "done";
 
   // 재촬영
   const retake = (which: "left" | "right") => {
@@ -210,7 +257,13 @@ export default function ScanTestPage() {
         setOcrResult(l.text);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "ocr_failed");
+      const raw = e instanceof Error ? e.message : "ocr_failed";
+      // fetch failed / ECONNREFUSED → Paddle 서버 미구동 상황으로 해석.
+      const friendly =
+        engine === "paddle" && /fetch failed|ECONNREFUSED|ETIMEDOUT/i.test(raw)
+          ? "Paddle 서버에 연결 실패 — 배포본에선 집 PC 서버(:8765) 접근 불가. Vision 으로 전환해주세요."
+          : raw;
+      setError(friendly);
     } finally {
       setBusy(false);
     }
@@ -249,38 +302,46 @@ export default function ScanTestPage() {
         </>
       )}
 
-      {/* 엔진 선택 — OCR 돌리기 직전에만 필요하므로 결과 단계에서만 */}
+      {/* 엔진 선택 — OCR 돌리기 직전에만 필요하므로 결과 단계에서만.
+          Paddle 은 로컬 Python 사이드카(:8765) 필요 — Vercel 배포본에선 안됨. */}
       {!capturing && (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginBottom: 14,
-            padding: 4,
-            background: "#f3f3f3",
-            borderRadius: 8,
-            width: "fit-content",
-          }}
-        >
-          {(["vision", "paddle"] as Engine[]).map((e) => (
-            <button
-              key={e}
-              onClick={() => setEngine(e)}
-              style={{
-                padding: "8px 14px",
-                background: engine === e ? "#222" : "transparent",
-                color: engine === e ? "#fff" : "#555",
-                border: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {e === "vision" ? "☁️ Vision" : "🖥️ Paddle"}
-            </button>
-          ))}
-        </div>
+        <>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 6,
+              padding: 4,
+              background: "#f3f3f3",
+              borderRadius: 8,
+              width: "fit-content",
+            }}
+          >
+            {(["vision", "paddle"] as Engine[]).map((e) => (
+              <button
+                key={e}
+                onClick={() => setEngine(e)}
+                style={{
+                  padding: "8px 14px",
+                  background: engine === e ? "#222" : "transparent",
+                  color: engine === e ? "#fff" : "#555",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {e === "vision" ? "☁️ Vision" : "🖥️ Paddle (로컬)"}
+              </button>
+            ))}
+          </div>
+          {engine === "paddle" && (
+            <div style={{ fontSize: 11, color: "#c80", marginBottom: 14 }}>
+              ⚠️ Paddle 은 집 PC 의 Python 서버(:8765) 에서만 돎. Vercel 배포본에선 Vision 을 써주세요.
+            </div>
+          )}
+        </>
       )}
 
       {/* 스텝 인디케이터 — 항상 노출 */}
@@ -316,8 +377,8 @@ export default function ScanTestPage() {
         </div>
       )}
 
-      {/* 스텝별 화면 */}
-      {step !== "done" && (
+      {/* 스텝별 화면 — 크롭 에디터가 열려있으면 카메라 대신 그걸 보여줌 */}
+      {step !== "done" && !pendingRaw && (
         <CameraPanel
           videoRef={videoRef}
           cameraReady={cameraReady}
@@ -329,6 +390,7 @@ export default function ScanTestPage() {
               : "이번엔 오른쪽 페이지. 한 페이지만 쓰려면 '오른쪽 스킵'."
           }
           onShoot={shoot}
+          onBack={canGoBack ? goBack : undefined}
           rightAction={
             step === "right" && !rightPage ? (
               <button onClick={skipRight} style={ghostBtn}>
@@ -336,6 +398,16 @@ export default function ScanTestPage() {
               </button>
             ) : null
           }
+        />
+      )}
+
+      {/* 크롭 에디터 — 셔터 직후 꼭짓점 조정 */}
+      {pendingRaw && (
+        <CropEditor
+          source={pendingRaw.canvas}
+          initialCorners={pendingRaw.initialCorners}
+          onConfirm={onCropConfirm}
+          onCancel={onCropCancel}
         />
       )}
 
@@ -457,6 +529,7 @@ function CameraPanel({
   label,
   hint,
   onShoot,
+  onBack,
   rightAction,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -465,6 +538,7 @@ function CameraPanel({
   label: string;
   hint: string;
   onShoot: () => void;
+  onBack?: () => void;
   rightAction?: React.ReactNode;
 }) {
   return (
@@ -528,7 +602,7 @@ function CameraPanel({
           />
         )}
 
-        {/* 셔터 — 오른쪽 세로 중앙 플로팅 */}
+        {/* 셔터 — 오른쪽 벽면에 바짝, 세로 중앙보다 살짝 아래 */}
         {cameraReady && (
           <button
             onClick={onShoot}
@@ -536,8 +610,8 @@ function CameraPanel({
             aria-label="셔터"
             style={{
               position: "absolute",
-              right: 14,
-              top: "50%",
+              right: 6,
+              top: "62%",
               transform: "translateY(-50%)",
               width: 64,
               height: 64,
@@ -563,6 +637,34 @@ function CameraPanel({
                 display: "block",
               }}
             />
+          </button>
+        )}
+
+        {/* 뒤로가기 — 좌상단 떠있는 버튼 (이전 step 복귀) */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="뒤로"
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              background: "rgba(0,0,0,0.55)",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.3)",
+              fontSize: 18,
+              lineHeight: 1,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+            }}
+          >
+            ‹
           </button>
         )}
 

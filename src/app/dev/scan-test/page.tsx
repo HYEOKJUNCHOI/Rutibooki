@@ -410,13 +410,21 @@ function CameraPanel({
         <span style={{ fontSize: 12, color: "#666" }}>{hint}</span>
       </div>
 
+      {/*
+        - 카메라 영역은 세로(포트레이트) — A4 세워놓고 한 페이지씩 찍는 용도.
+        - 가이드 프레임은 A4 비율(√2 ≈ 1.414) 근사 → 가로 68%, 세로 약 96%.
+          (컨테이너가 3:4 이므로 계산: 68% × 4/3 ≈ 90% → 96%/90% = 1.06, 실사용 OK)
+        - 셔터는 오른쪽에 플로팅 원형 버튼 (아이폰 가로모드 카메라 감성).
+      */}
       <div
         style={{
           position: "relative",
           background: "#000",
           borderRadius: 8,
           overflow: "hidden",
-          aspectRatio: "4 / 3",
+          aspectRatio: "3 / 4",
+          maxWidth: 480,
+          margin: "0 auto",
         }}
       >
         <video
@@ -426,18 +434,59 @@ function CameraPanel({
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
 
-        {/* 가이드 프레임 — 중앙 70% */}
+        {/* 가이드 프레임 — A4 세로형, 빨간 실선 */}
         {cameraReady && (
           <div
             style={{
               position: "absolute",
-              inset: "8%",
-              border: "2px dashed #3ddc97",
-              borderRadius: 6,
+              top: "3%",
+              bottom: "3%",
+              left: "16%",
+              right: "16%",
+              border: "3px solid #FF3B30",
+              borderRadius: 4,
               pointerEvents: "none",
-              boxShadow: "0 0 0 9999px rgba(0,0,0,0.25)",
+              boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)",
             }}
           />
+        )}
+
+        {/* 셔터 — 오른쪽 세로 중앙 플로팅 */}
+        {cameraReady && (
+          <button
+            onClick={onShoot}
+            disabled={busy}
+            aria-label="셔터"
+            style={{
+              position: "absolute",
+              right: 14,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: "#fff",
+              border: "4px solid rgba(255,255,255,0.45)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.5)",
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.45 : 1,
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                background: "#fff",
+                border: "2px solid #000",
+                display: "block",
+              }}
+            />
+          </button>
         )}
 
         {!cameraReady && (
@@ -474,22 +523,11 @@ function CameraPanel({
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12 }}>
-        <button
-          onClick={onShoot}
-          disabled={!cameraReady || busy}
-          style={{
-            ...primaryBtn,
-            flex: "0 0 auto",
-            minWidth: 140,
-            opacity: !cameraReady || busy ? 0.5 : 1,
-            cursor: !cameraReady || busy ? "not-allowed" : "pointer",
-          }}
-        >
-          📸 셔터
-        </button>
-        {rightAction}
-      </div>
+      {rightAction && (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12 }}>
+          {rightAction}
+        </div>
+      )}
     </div>
   );
 }

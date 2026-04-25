@@ -31,6 +31,8 @@ export default function CropEditor({
   onCancel,
 }: CropEditorProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // 부모 폭 측정용 — wrapRef 는 displaySize 적용 후 작아지므로 분리 필요.
+  const measureRef = useRef<HTMLDivElement | null>(null);
   const [corners, setCorners] = useState<[Pt, Pt, Pt, Pt]>(initialCorners);
   const [displaySize, setDisplaySize] = useState({ w: 1, h: 1 });
   const [busy, setBusy] = useState(false);
@@ -42,14 +44,24 @@ export default function CropEditor({
     setPreviewUrl(source.toDataURL("image/jpeg", 0.85));
   }, [source]);
 
-  // 컨테이너 폭에 맞춰 표시 크기 계산 — 원본 비율 유지.
+  // 표시 크기 계산 — 가로/세로 모두 뷰포트 안에 들어가도록.
+  // 4 꼭짓점·4 변 핸들 + 하단 버튼까지 한 화면에 보이게 height 상한도 둠.
   useEffect(() => {
     const recalc = () => {
-      const el = wrapRef.current;
+      const el = measureRef.current;
       if (!el) return;
-      const maxW = el.clientWidth;
-      const scale = maxW / source.width;
-      setDisplaySize({ w: maxW, h: source.height * scale });
+      const maxW = Math.min(el.clientWidth, 420);
+      // 안내 텍스트 + 핸들 여유 + 하단 버튼 위해 화면 55% 만 사용.
+      const maxH = window.innerHeight * 0.55;
+      const ratio = source.width / source.height;
+      // width-limited 인 경우의 높이
+      const hByW = maxW / ratio;
+      if (hByW <= maxH) {
+        setDisplaySize({ w: maxW, h: hByW });
+      } else {
+        // height-limited — 가로 줄여서 비율 유지
+        setDisplaySize({ w: maxH * ratio, h: maxH });
+      }
     };
     recalc();
     window.addEventListener("resize", recalc);
@@ -208,6 +220,8 @@ export default function CropEditor({
       <div style={{ fontSize: 12, color: "#888", marginBottom: 6, textAlign: "center" }}>
         꼭짓점(원) 이나 변 중앙(사각형) 을 끌어 책 모서리에 맞춰주세요
       </div>
+      {/* 외부 측정용 div — 부모 폭 추적, 내부 wrapRef 는 실제 displaySize 만큼만 차지 */}
+      <div ref={measureRef} style={{ width: "100%", display: "flex", justifyContent: "center" }}>
       <div
         ref={wrapRef}
         onPointerMove={onPointerMove}
@@ -217,18 +231,17 @@ export default function CropEditor({
         onContextMenu={(e) => e.preventDefault()}
         style={{
           position: "relative",
-          width: "100%",
+          // displaySize 가 height-limited 인 경우 width 도 줄여서 비율 유지.
+          width: displaySize.w || "100%",
           maxWidth: 420,
           margin: "0 auto",
           touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
-          // iOS callout 막기 — img 위 long-press 시 시스템 메뉴 안 뜸.
           WebkitTouchCallout: "none",
           background: "#000",
           borderRadius: 8,
           overflow: "hidden",
-          // 컨테이너 높이 명시 — 이미지 로드 전에도 핸들 좌표가 튀지 않도록.
           height: displaySize.h || undefined,
         }}
       >
@@ -310,6 +323,7 @@ export default function CropEditor({
             }}
           />
         ))}
+      </div>
       </div>
 
       {err && (

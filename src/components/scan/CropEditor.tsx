@@ -213,6 +213,8 @@ export default function CropEditor({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        // iOS Safari long-press 컨텍스트 메뉴(복사하기/찾아보기/번역) 차단.
+        onContextMenu={(e) => e.preventDefault()}
         style={{
           position: "relative",
           width: "100%",
@@ -220,6 +222,9 @@ export default function CropEditor({
           margin: "0 auto",
           touchAction: "none",
           userSelect: "none",
+          WebkitUserSelect: "none",
+          // iOS callout 막기 — img 위 long-press 시 시스템 메뉴 안 뜸.
+          WebkitTouchCallout: "none",
           background: "#000",
           borderRadius: 8,
           overflow: "hidden",
@@ -232,7 +237,16 @@ export default function CropEditor({
           <img
             src={previewUrl}
             alt="원본"
-            style={{ width: "100%", display: "block", pointerEvents: "none" }}
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{
+              width: "100%",
+              display: "block",
+              pointerEvents: "none",
+              WebkitUserSelect: "none",
+              WebkitTouchCallout: "none",
+              userSelect: "none",
+            }}
           />
         )}
 

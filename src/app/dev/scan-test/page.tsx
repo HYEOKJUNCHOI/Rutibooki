@@ -529,8 +529,8 @@ function SlotIndicator({
   );
 }
 
-// 책 모양 가이드 — 펼친 책 SVG. 약간의 원근(사다리꼴) + 책등 그림자 + 본문 라인.
-// "한 장씩 따로" 라는 컨셉을 시각화. slotNumber 와 무관하게 정적.
+// 책 모양 가이드 — 앱 브랜드 아이콘(/app/icon.svg) 두 개 + "1 → 2" 순서 안내.
+// "한 장씩 따로 찍기" 컨셉을 우리 브랜드 비주얼로 표현.
 function BookGuide() {
   return (
     <div
@@ -538,74 +538,55 @@ function BookGuide() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 12,
+        gap: 10,
         padding: "6px 0 4px",
       }}
     >
-      <svg
-        viewBox="0 0 200 110"
-        width={140}
-        height={77}
-        style={{ display: "block" }}
-      >
-        {/* 책 바닥 그림자 */}
-        <ellipse cx="100" cy="104" rx="78" ry="3" fill="rgba(0,0,0,0.18)" />
-        {/* 왼쪽 페이지 — portrait. 페이지 단일 비율 ≈ 60:84 (가로:세로 ≈ 0.71) */}
-        <path
-          d="M 28,14 L 98,11 L 98,98 L 28,95 Z"
-          fill="#ffffff"
-          stroke={ACCENT}
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-        {/* 오른쪽 페이지 */}
-        <path
-          d="M 102,11 L 172,14 L 172,95 L 102,98 Z"
-          fill="#ffffff"
-          stroke={ACCENT}
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-        {/* 책등 그림자 */}
-        <rect x="98" y="11" width="4" height="87" fill="rgba(0,0,0,0.14)" />
-        {/* 본문 라인 (왼쪽) */}
-        <line x1="36" y1="26" x2="92" y2="24" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="36" y1="34" x2="92" y2="33" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="36" y1="42" x2="80" y2="41" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="36" y1="50" x2="86" y2="49" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        {/* 본문 라인 (오른쪽) */}
-        <line x1="108" y1="24" x2="164" y2="26" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="108" y1="33" x2="164" y2="34" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="108" y1="41" x2="152" y2="42" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        <line x1="108" y1="49" x2="158" y2="50" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
-        {/* 페이지 번호 — 페이지 하단에 크게 */}
-        <text
-          x="63"
-          y="84"
-          textAnchor="middle"
-          fontSize="20"
-          fontWeight="800"
-          fill={ACCENT}
-          fontFamily="system-ui, sans-serif"
-        >
-          1
-        </text>
-        <text
-          x="137"
-          y="84"
-          textAnchor="middle"
-          fontSize="20"
-          fontWeight="800"
-          fill={ACCENT}
-          fontFamily="system-ui, sans-serif"
-        >
-          2
-        </text>
-      </svg>
-      <span style={{ color: "#888", fontSize: 11, lineHeight: 1.3 }}>
+      <BookIconBadge number={1} />
+      <span style={{ color: ACCENT, fontSize: 18, fontWeight: 800 }}>→</span>
+      <BookIconBadge number={2} />
+      <span style={{ color: "#888", fontSize: 11, lineHeight: 1.3, marginLeft: 6 }}>
         한 장씩
-        <br />따로 찍기
+        <br />차례로
       </span>
+    </div>
+  );
+}
+
+// 브랜드 아이콘 + 번호 배지. icon.svg 의 path 를 그대로 사용 — 단일 진실 출처.
+function BookIconBadge({ number }: { number: number }) {
+  const SIZE = 44;
+  return (
+    <div style={{ position: "relative", width: SIZE, height: SIZE }}>
+      <svg viewBox="0 0 64 64" width={SIZE} height={SIZE} style={{ display: "block" }}>
+        <rect width="64" height="64" rx="14" fill="#0A0A0A" />
+        <path d="M12 18 L32 22 L32 48 L12 44 Z" fill="#00FF7A" />
+        <path d="M52 18 L32 22 L32 48 L52 44 Z" fill="#00B858" />
+        <rect x="31" y="22" width="2" height="26" fill="#007540" />
+        <path d="M12 18 L32 22 L32 24 L12 20 Z" fill="#00FF7A" opacity="0.6" />
+      </svg>
+      {/* 번호 배지 — 우상단 */}
+      <div
+        style={{
+          position: "absolute",
+          right: -6,
+          top: -6,
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: ACCENT,
+          color: "#000",
+          fontSize: 12,
+          fontWeight: 800,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
+          border: "2px solid #fff",
+        }}
+      >
+        {number}
+      </div>
     </div>
   );
 }

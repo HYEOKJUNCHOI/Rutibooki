@@ -51,6 +51,8 @@ export default function ScanTestPage() {
   const [ocrResult, setOcrResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRaw, setPendingRaw] = useState<PendingRaw | null>(null);
+  // 슬롯 카드 탭 시 풀사이즈 뷰어로 보여줄 페이지 인덱스.
+  const [viewingIdx, setViewingIdx] = useState<number | null>(null);
 
   const capturedCount = pages.filter((p) => p !== null).length;
   const capturing = activeSlot !== null;
@@ -380,6 +382,7 @@ export default function ScanTestPage() {
               slotNumber={i + 1}
               page={p}
               onRetake={p ? () => retakeSlot(i) : undefined}
+              onView={p ? () => setViewingIdx(i) : undefined}
               isActive={activeSlot === i}
             />
           ))}
@@ -435,6 +438,21 @@ export default function ScanTestPage() {
             처음부터
           </button>
         </div>
+      )}
+
+      {/* 라이트박스 — 슬롯 클릭 시 풀사이즈 뷰어 */}
+      {viewingIdx !== null && pages[viewingIdx] && (
+        <Lightbox
+          page={pages[viewingIdx]!}
+          slotNumber={viewingIdx + 1}
+          total={capturedCount}
+          onClose={() => setViewingIdx(null)}
+          onRetake={() => {
+            const idx = viewingIdx;
+            setViewingIdx(null);
+            retakeSlot(idx);
+          }}
+        />
       )}
 
       {ocrResult && (
@@ -756,35 +774,35 @@ function CameraPanel({
           </button>
         )}
 
-        {/* 뒤로가기 좌상단 */}
+        {/* 뒤로가기 좌상단 — 텍스트 라벨까지 */}
         {onBack && (
           <button
             onClick={onBack}
-            aria-label="뒤로"
+            aria-label="이전"
             style={{
               position: "absolute",
               left: 10,
               top: 10,
-              width: 38,
-              height: 38,
-              borderRadius: "50%",
-              background: "rgba(0,0,0,0.55)",
+              padding: "9px 14px 9px 11px",
+              borderRadius: 999,
+              background: "rgba(0,0,0,0.6)",
               color: "#fff",
-              border: "1px solid rgba(255,255,255,0.3)",
-              fontSize: 18,
+              border: "1px solid rgba(255,255,255,0.25)",
+              fontSize: 13,
+              fontWeight: 700,
               lineHeight: 1,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              padding: 0,
+              gap: 4,
             }}
           >
-            ‹
+            <span style={{ fontSize: 16, lineHeight: 1, marginTop: -1 }}>‹</span>
+            이전
           </button>
         )}
 
-        {/* 촬영 완료 우상단 — 1장 이상일 때만 */}
+        {/* 촬영 완료 우상단 — 크게 + 강조 */}
         {onFinish && (
           <button
             onClick={onFinish}
@@ -792,15 +810,16 @@ function CameraPanel({
               position: "absolute",
               right: 10,
               top: 10,
-              padding: "8px 14px",
+              padding: "12px 20px",
               borderRadius: 999,
               background: ACCENT,
               color: "#000",
               border: "none",
-              fontSize: 12,
-              fontWeight: 800,
+              fontSize: 15,
+              fontWeight: 900,
               cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+              boxShadow: "0 4px 14px rgba(0,255,122,0.5)",
+              letterSpacing: "-0.3px",
             }}
           >
             완료 ({totalCaptured})
@@ -875,21 +894,25 @@ function CaptureCard({
   slotNumber,
   page,
   onRetake,
+  onView,
   isActive,
 }: {
   slotNumber: number;
   page: PageCapture | null;
   onRetake?: () => void;
+  onView?: () => void;
   isActive?: boolean;
 }) {
   return (
     <div
+      onClick={onView}
       style={{
         border: `2px solid ${isActive ? ACCENT : page ? "#dadada" : "#1f1f1f"}`,
         borderRadius: 6,
         padding: 3,
         background: page ? "#fafafa" : "#0E0E0E",
         position: "relative",
+        cursor: onView ? "pointer" : "default",
       }}
     >
       {/* 슬롯 번호 — 좌상단 작게 */}
@@ -913,7 +936,10 @@ function CaptureCard({
       {/* 다시찍기 — 채워진 슬롯만, 우상단 (탭 영역 작게 — 하단 큰 다시찍기 따로 있어도 OK) */}
       {onRetake && (
         <button
-          onClick={onRetake}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetake();
+          }}
           aria-label="다시"
           style={{
             position: "absolute",
@@ -965,6 +991,135 @@ function CaptureCard({
           {isActive ? "●" : ""}
         </div>
       )}
+    </div>
+  );
+}
+
+// 슬롯 카드 탭 시 뜨는 풀스크린 뷰어. 어두운 배경 + 큰 이미지 + 닫기/재촬영.
+function Lightbox({
+  page,
+  slotNumber,
+  total,
+  onClose,
+  onRetake,
+}: {
+  page: PageCapture;
+  slotNumber: number;
+  total: number;
+  onClose: () => void;
+  onRetake: () => void;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.92)",
+        zIndex: 2000,
+        display: "flex",
+        flexDirection: "column",
+        padding: "max(env(safe-area-inset-top, 0px), 12px) 12px 16px",
+      }}
+    >
+      {/* 상단 바 — 슬롯 번호 + 닫기 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>
+          {slotNumber} / {total}번 페이지
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label="닫기"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.12)",
+            color: "#fff",
+            border: "none",
+            fontSize: 18,
+            cursor: "pointer",
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* 이미지 — 가운데, 화면 안에 꽉 차게 */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 0,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={page.previewUrl}
+          alt={`${slotNumber}번 페이지 풀사이즈`}
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            objectFit: "contain",
+            borderRadius: 6,
+            WebkitTouchCallout: "none",
+            WebkitUserSelect: "none",
+            userSelect: "none",
+          }}
+        />
+      </div>
+
+      {/* 하단 액션 — 다시 찍기 */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 14 }}
+      >
+        <button
+          onClick={onRetake}
+          style={{
+            padding: "12px 22px",
+            background: "transparent",
+            color: "#fff",
+            border: "1px solid rgba(255,255,255,0.4)",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          다시 찍기
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            padding: "12px 26px",
+            background: ACCENT,
+            color: "#000",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          닫기
+        </button>
+      </div>
     </div>
   );
 }

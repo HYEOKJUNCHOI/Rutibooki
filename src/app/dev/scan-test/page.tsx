@@ -632,7 +632,7 @@ function CameraPanel({
   return (
     <div>
       {/* 책모양 가이드 + 슬롯 번호 안내 한 줄 */}
-      <BookGuide slotNumber={slotNumber} />
+      <BookGuide />
       <div
         style={{
           display: "flex",

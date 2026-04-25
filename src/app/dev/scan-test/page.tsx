@@ -529,58 +529,82 @@ function SlotIndicator({
   );
 }
 
-// 책 모양 가이드 — "한 장씩 따로 찍어주세요" 시각화.
-// 1번 (왼쪽) 다 찍고 2번 (오른쪽) 으로 페이지 넘긴 뒤 다시 찍는 식.
-function BookGuide({ slotNumber }: { slotNumber: number }) {
+// 책 모양 가이드 — 펼친 책 SVG. 약간의 원근(사다리꼴) + 책등 그림자 + 본문 라인.
+// "한 장씩 따로" 라는 컨셉을 시각화. slotNumber 와 무관하게 정적.
+function BookGuide() {
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 0,
-        padding: "8px 0",
+        gap: 12,
+        padding: "6px 0 4px",
       }}
     >
-      <div
-        style={{
-          width: 38,
-          height: 50,
-          border: `2px solid ${ACCENT}`,
-          borderRight: "none",
-          borderRadius: "4px 0 0 4px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 16,
-          fontWeight: 800,
-          color: ACCENT,
-          background: slotNumber === 1 ? `${ACCENT}22` : "transparent",
-        }}
+      <svg
+        viewBox="0 0 200 110"
+        width={140}
+        height={77}
+        style={{ display: "block" }}
       >
-        1
-      </div>
-      <div style={{ width: 1, height: 50, background: ACCENT, opacity: 0.5 }} />
-      <div
-        style={{
-          width: 38,
-          height: 50,
-          border: `2px solid ${ACCENT}`,
-          borderLeft: "none",
-          borderRadius: "0 4px 4px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 16,
-          fontWeight: 800,
-          color: ACCENT,
-          background: slotNumber === 2 ? `${ACCENT}22` : "transparent",
-        }}
-      >
-        2
-      </div>
-      <span style={{ color: "#888", fontSize: 11, marginLeft: 10 }}>
-        한 장씩 따로 ↑
+        {/* 책 바닥 그림자 */}
+        <ellipse cx="100" cy="104" rx="78" ry="3" fill="rgba(0,0,0,0.18)" />
+        {/* 왼쪽 페이지 — portrait. 페이지 단일 비율 ≈ 60:84 (가로:세로 ≈ 0.71) */}
+        <path
+          d="M 28,14 L 98,11 L 98,98 L 28,95 Z"
+          fill="#ffffff"
+          stroke={ACCENT}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        {/* 오른쪽 페이지 */}
+        <path
+          d="M 102,11 L 172,14 L 172,95 L 102,98 Z"
+          fill="#ffffff"
+          stroke={ACCENT}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        {/* 책등 그림자 */}
+        <rect x="98" y="11" width="4" height="87" fill="rgba(0,0,0,0.14)" />
+        {/* 본문 라인 (왼쪽) */}
+        <line x1="36" y1="26" x2="92" y2="24" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="36" y1="34" x2="92" y2="33" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="36" y1="42" x2="80" y2="41" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="36" y1="50" x2="86" y2="49" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        {/* 본문 라인 (오른쪽) */}
+        <line x1="108" y1="24" x2="164" y2="26" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="108" y1="33" x2="164" y2="34" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="108" y1="41" x2="152" y2="42" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        <line x1="108" y1="49" x2="158" y2="50" stroke={ACCENT} strokeWidth="1" opacity="0.4" />
+        {/* 페이지 번호 — 페이지 하단에 크게 */}
+        <text
+          x="63"
+          y="84"
+          textAnchor="middle"
+          fontSize="20"
+          fontWeight="800"
+          fill={ACCENT}
+          fontFamily="system-ui, sans-serif"
+        >
+          1
+        </text>
+        <text
+          x="137"
+          y="84"
+          textAnchor="middle"
+          fontSize="20"
+          fontWeight="800"
+          fill={ACCENT}
+          fontFamily="system-ui, sans-serif"
+        >
+          2
+        </text>
+      </svg>
+      <span style={{ color: "#888", fontSize: 11, lineHeight: 1.3 }}>
+        한 장씩
+        <br />따로 찍기
       </span>
     </div>
   );
@@ -659,14 +683,19 @@ function CameraPanel({
           }}
         />
 
+        {/*
+          가이드 비율 — SVG 책 한 페이지 비율(약 0.71 portrait) 매칭.
+          컨테이너 3:4 안에서 left/right 5%, top/bottom 8% → 90% × 84%.
+          픽셀 환산 (300×400 기준) 270 × 336, 가로:세로 ≈ 0.80 → 책 한 페이지에 가까움.
+        */}
         {cameraReady && (
           <div
             style={{
               position: "absolute",
-              top: "3%",
-              bottom: "3%",
-              left: "16%",
-              right: "16%",
+              top: "8%",
+              bottom: "8%",
+              left: "5%",
+              right: "5%",
               border: `3px solid ${ACCENT}`,
               borderRadius: 4,
               pointerEvents: "none",
@@ -682,12 +711,14 @@ function CameraPanel({
             disabled={busy}
             aria-label="셔터"
             style={{
+              // 가이드 바깥(right 5% 영역) 위에 떠있는 셔터.
+              // 가이드 박스 옆 어두워진 영역에 자연스럽게 안착.
               position: "absolute",
-              right: 6,
-              top: "62%",
+              right: 8,
+              top: "65%",
               transform: "translateY(-50%)",
-              width: 64,
-              height: 64,
+              width: 56,
+              height: 56,
               borderRadius: "50%",
               background: "#fff",
               border: "4px solid rgba(255,255,255,0.45)",
@@ -702,8 +733,8 @@ function CameraPanel({
           >
             <span
               style={{
-                width: 46,
-                height: 46,
+                width: 40,
+                height: 40,
                 borderRadius: "50%",
                 background: "#fff",
                 border: "2px solid #000",

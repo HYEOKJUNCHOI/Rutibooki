@@ -543,9 +543,9 @@ function BookGuide() {
       }}
     >
       <BookIconBadge number={1} />
-      <span style={{ color: ACCENT, fontSize: 18, fontWeight: 800 }}>→</span>
+      <span style={{ color: ACCENT, fontSize: 22, fontWeight: 800 }}>→</span>
       <BookIconBadge number={2} />
-      <span style={{ color: "#888", fontSize: 11, lineHeight: 1.3, marginLeft: 6 }}>
+      <span style={{ color: "#888", fontSize: 12, lineHeight: 1.3, marginLeft: 8 }}>
         한 장씩
         <br />차례로
       </span>
@@ -554,8 +554,9 @@ function BookGuide() {
 }
 
 // 브랜드 아이콘 + 번호 배지. icon.svg 의 path 를 그대로 사용 — 단일 진실 출처.
+// 홈 스크린 앱 아이콘과 동일한 비주얼.
 function BookIconBadge({ number }: { number: number }) {
-  const SIZE = 44;
+  const SIZE = 64;
   return (
     <div style={{ position: "relative", width: SIZE, height: SIZE }}>
       <svg viewBox="0 0 64 64" width={SIZE} height={SIZE} style={{ display: "block" }}>
@@ -569,19 +570,19 @@ function BookIconBadge({ number }: { number: number }) {
       <div
         style={{
           position: "absolute",
-          right: -6,
-          top: -6,
-          width: 20,
-          height: 20,
+          right: -8,
+          top: -8,
+          width: 26,
+          height: 26,
           borderRadius: "50%",
           background: ACCENT,
           color: "#000",
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
           border: "2px solid #fff",
         }}
       >

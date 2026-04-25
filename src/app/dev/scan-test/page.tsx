@@ -542,9 +542,9 @@ function BookGuide() {
         padding: "6px 0 4px",
       }}
     >
-      <BookIconBadge number={1} />
+      <BookIconBadge number={1} emphasis="left" />
       <span style={{ color: ACCENT, fontSize: 22, fontWeight: 800 }}>→</span>
-      <BookIconBadge number={2} />
+      <BookIconBadge number={2} emphasis="right" />
       <span style={{ color: "#888", fontSize: 12, lineHeight: 1.3, marginLeft: 8 }}>
         한 장씩
         <br />차례로
@@ -553,18 +553,53 @@ function BookGuide() {
   );
 }
 
-// 브랜드 아이콘 + 번호 배지. icon.svg 의 path 를 그대로 사용 — 단일 진실 출처.
-// 홈 스크린 앱 아이콘과 동일한 비주얼.
-function BookIconBadge({ number }: { number: number }) {
+// 브랜드 아이콘 + 번호 배지 + emphasis 강조면.
+// emphasis="left" → 왼쪽 페이지를 밝게, 오른쪽은 어둡게 (1번 아이콘)
+// emphasis="right" → 그 반대 (2번 아이콘)
+function BookIconBadge({
+  number,
+  emphasis,
+}: {
+  number: number;
+  emphasis?: "left" | "right";
+}) {
   const SIZE = 64;
+  // 강조면: ACCENT(#00FF7A) 그대로. 비강조면: 어두운 회녹색 + 살짝 투명.
+  const leftFill = emphasis === "left" ? "#00FF7A" : emphasis === "right" ? "#1F4030" : "#00FF7A";
+  const rightFill = emphasis === "right" ? "#00FF7A" : emphasis === "left" ? "#1F4030" : "#00B858";
+  const leftHighlight = emphasis === "left";
+  const rightHighlight = emphasis === "right";
   return (
     <div style={{ position: "relative", width: SIZE, height: SIZE }}>
       <svg viewBox="0 0 64 64" width={SIZE} height={SIZE} style={{ display: "block" }}>
         <rect width="64" height="64" rx="14" fill="#0A0A0A" />
-        <path d="M12 18 L32 22 L32 48 L12 44 Z" fill="#00FF7A" />
-        <path d="M52 18 L32 22 L32 48 L52 44 Z" fill="#00B858" />
+        <path d="M12 18 L32 22 L32 48 L12 44 Z" fill={leftFill} />
+        <path d="M52 18 L32 22 L32 48 L52 44 Z" fill={rightFill} />
         <rect x="31" y="22" width="2" height="26" fill="#007540" />
-        <path d="M12 18 L32 22 L32 24 L12 20 Z" fill="#00FF7A" opacity="0.6" />
+        {/* 강조면 글로우 — 위쪽에 살짝 더 밝게 */}
+        {leftHighlight && (
+          <path d="M12 18 L32 22 L32 24 L12 20 Z" fill="#00FF7A" opacity="0.6" />
+        )}
+        {rightHighlight && (
+          <path d="M52 18 L32 22 L32 24 L52 20 Z" fill="#00FF7A" opacity="0.6" />
+        )}
+        {/* 강조면 외곽선 — 시선 끌기용 */}
+        {leftHighlight && (
+          <path
+            d="M12 18 L32 22 L32 48 L12 44 Z"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.2"
+          />
+        )}
+        {rightHighlight && (
+          <path
+            d="M52 18 L32 22 L32 48 L52 44 Z"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.2"
+          />
+        )}
       </svg>
       {/* 번호 배지 — 우상단 */}
       <div
@@ -693,12 +728,10 @@ function CameraPanel({
             disabled={busy}
             aria-label="셔터"
             style={{
-              // 가이드 바깥(right 5% 영역) 위에 떠있는 셔터.
-              // 가이드 박스 옆 어두워진 영역에 자연스럽게 안착.
+              // 우하단 모서리 — 가이드 박스 바깥 어두운 영역에 안착.
               position: "absolute",
-              right: 8,
-              top: "65%",
-              transform: "translateY(-50%)",
+              right: 12,
+              bottom: 12,
               width: 56,
               height: 56,
               borderRadius: "50%",

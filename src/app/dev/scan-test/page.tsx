@@ -362,6 +362,30 @@ export default function ScanTestPage() {
       )}
       {error && <div style={errorBox}>{error}</div>}
 
+      {/*
+        캡처 미리보기 — 6슬롯 항상 노출 (빈 슬롯도 표시).
+        한 줄 6칸으로 컴팩트하게 — 폰에서도 한눈에 진행상황 파악 가능.
+      */}
+      <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(6, 1fr)",
+            gap: 4,
+          }}
+        >
+          {pages.map((p, i) => (
+            <CaptureCard
+              key={i}
+              slotNumber={i + 1}
+              page={p}
+              onRetake={p ? () => retakeSlot(i) : undefined}
+              isActive={activeSlot === i}
+            />
+          ))}
+        </div>
+      </div>
+
       {/* 카메라 (촬영 중 + 크롭 에디터 안 떠있을 때) */}
       {capturing && !pendingRaw && (
         <CameraPanel
@@ -384,32 +408,6 @@ export default function ScanTestPage() {
           onConfirm={onCropConfirm}
           onCancel={onCropCancel}
         />
-      )}
-
-      {/* 캡처 결과 — 1..N 슬롯 그리드 */}
-      {capturedCount > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            캡처된 페이지 ({capturedCount}장)
-          </h2>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 8,
-            }}
-          >
-            {pages.map((p, i) => (
-              <CaptureCard
-                key={i}
-                slotNumber={i + 1}
-                page={p}
-                onRetake={p ? () => retakeSlot(i) : undefined}
-                isActive={activeSlot === i}
-              />
-            ))}
-          </div>
-        </div>
       )}
 
       {/* OCR + 추가촬영 + 리셋 */}
@@ -648,8 +646,7 @@ function CameraPanel({
 }) {
   return (
     <div>
-      {/* 책모양 가이드 + 슬롯 번호 안내 한 줄 */}
-      <BookGuide />
+      {/* 슬롯 번호만 카메라 위에 짧게 — 책모양 가이드는 카메라 아래로 이동 */}
       <div
         style={{
           display: "flex",
@@ -659,7 +656,7 @@ function CameraPanel({
           fontSize: 12,
         }}
       >
-        <span style={{ fontWeight: 800, color: ACCENT }}>
+        <span style={{ fontWeight: 800, color: ACCENT, fontSize: 14 }}>
           {slotNumber}번째 페이지
         </span>
         <span
@@ -843,6 +840,33 @@ function CameraPanel({
           </div>
         )}
       </div>
+
+      {/* 카메라 아래 — 책모양 가이드 + 촬영 팁 */}
+      <div style={{ marginTop: 14 }}>
+        <BookGuide />
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            background: "rgba(0,255,122,0.06)",
+            border: "1px solid rgba(0,255,122,0.25)",
+            borderRadius: 8,
+            fontSize: 11.5,
+            color: "#aaa",
+            lineHeight: 1.7,
+          }}
+        >
+          <div style={{ color: ACCENT, fontWeight: 700, marginBottom: 4 }}>
+            촬영 팁
+          </div>
+          <div>
+            <span style={{ color: ACCENT, fontWeight: 700 }}>1.</span> 책을 수평으로 — 기울이면 글자가 휘어요
+          </div>
+          <div>
+            <span style={{ color: ACCENT, fontWeight: 700 }}>2.</span> 페이지 번호가 짤리지 않게 하단까지 꽉 차게
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -861,40 +885,56 @@ function CaptureCard({
   return (
     <div
       style={{
-        border: `1px solid ${isActive ? ACCENT : "#eee"}`,
-        borderRadius: 8,
-        padding: 6,
-        background: page ? "#fafafa" : "#f5f5f5",
+        border: `2px solid ${isActive ? ACCENT : page ? "#dadada" : "#1f1f1f"}`,
+        borderRadius: 6,
+        padding: 3,
+        background: page ? "#fafafa" : "#0E0E0E",
         position: "relative",
       }}
     >
-      <div
+      {/* 슬롯 번호 — 좌상단 작게 */}
+      <span
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 4,
+          position: "absolute",
+          left: 4,
+          top: 2,
+          fontSize: 10,
+          fontWeight: 800,
+          color: page ? "#000" : isActive ? ACCENT : "#666",
+          background: page ? "rgba(255,255,255,0.85)" : "transparent",
+          padding: page ? "0 4px" : 0,
+          borderRadius: 3,
+          zIndex: 1,
+          lineHeight: 1.4,
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 800, color: page ? "#000" : "#aaa" }}>
-          {slotNumber}
-        </span>
-        {onRetake && (
-          <button
-            onClick={onRetake}
-            style={{
-              fontSize: 10,
-              padding: "2px 6px",
-              background: "transparent",
-              border: "1px solid #ccc",
-              borderRadius: 3,
-              cursor: "pointer",
-            }}
-          >
-            다시
-          </button>
-        )}
-      </div>
+        {slotNumber}
+      </span>
+      {/* 다시찍기 — 채워진 슬롯만, 우상단 (탭 영역 작게 — 하단 큰 다시찍기 따로 있어도 OK) */}
+      {onRetake && (
+        <button
+          onClick={onRetake}
+          aria-label="다시"
+          style={{
+            position: "absolute",
+            right: 2,
+            top: 2,
+            width: 18,
+            height: 18,
+            padding: 0,
+            background: "rgba(0,0,0,0.55)",
+            color: "#fff",
+            border: "none",
+            borderRadius: "50%",
+            fontSize: 10,
+            lineHeight: 1,
+            cursor: "pointer",
+            zIndex: 1,
+          }}
+        >
+          ↺
+        </button>
+      )}
       {page ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -912,16 +952,17 @@ function CaptureCard({
         <div
           style={{
             aspectRatio: "3 / 4",
-            background: "#eaeaea",
+            background: isActive ? `${ACCENT}11` : "#181818",
             borderRadius: 3,
-            color: "#bbb",
-            fontSize: 11,
+            color: isActive ? ACCENT : "#444",
+            fontSize: 18,
+            fontWeight: 800,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          비어있음
+          {isActive ? "●" : ""}
         </div>
       )}
     </div>

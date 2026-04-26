@@ -149,7 +149,7 @@ async function resolveMetaByIsbn(
 }
 
 // extractionStep 만 Firestore 에서 삭제. failed 마감 시 라벨 제거용.
-async function clearExtractionStep(shellId: string) {
+export async function clearExtractionStep(shellId: string) {
   const { auth, db } = await import("@/lib/firebase");
   const { doc, updateDoc, deleteField } = await import("firebase/firestore");
   const uid = auth.currentUser?.uid;
@@ -172,7 +172,7 @@ async function clearExtractionStep(shellId: string) {
 }
 
 // status·extractionStep 필드를 Firestore 에서 실제로 삭제. undefined patch 는 에러라 deleteField 사용.
-async function clearStatusField(shellId: string) {
+export async function clearStatusField(shellId: string) {
   const { auth, db } = await import("@/lib/firebase");
   const { doc, updateDoc, deleteField } = await import("firebase/firestore");
   const uid = auth.currentUser?.uid;

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<OkResp | ErrR
   }
 
   const totalPagesRaw = form.get("totalPages");
-  const totalPages =
+  let totalPages =
     typeof totalPagesRaw === "string" ? Number(totalPagesRaw) || 0 : 0;
 
   // 파일 수집 — file_0, file_1, ... 또는 file 다중.
@@ -109,6 +109,27 @@ export async function POST(req: NextRequest): Promise<NextResponse<OkResp | ErrR
       { ok: false, error: "ocr_empty", detail: "Vision 이 텍스트를 못 뽑았어요" },
       { status: 422 },
     );
+  }
+
+  // OCR 줄들에서 발견되는 최대 페이지 번호 — totalPages 가 0/잘못된 경우 안전망.
+  // "... 256" 처럼 줄 끝 4자리 이하 숫자만. 비현실적인 큰 값(년도 등)은 1500 이하로 제한.
+  const PAGE_TAIL = /\s(\d{1,4})\s*$/;
+  let maxTailPage = 0;
+  for (const l of cleanLines) {
+    const m = PAGE_TAIL.exec(l);
+    if (m) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v > maxTailPage && v <= 1500) {
+        maxTailPage = v;
+      }
+    }
+  }
+  // 알라딘 totalPages 가 0 이거나 추출 max 보다 작으면 max 채택 — 마지막 챕터 잘림 방지.
+  if (maxTailPage > totalPages) {
+    console.log(
+      `[classify-toc] totalPages override ${totalPages} → ${maxTailPage} (max tail)`,
+    );
+    totalPages = maxTailPage;
   }
 
   // ── 2) AI 분류 — Gemini ──

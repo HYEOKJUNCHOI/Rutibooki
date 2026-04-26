@@ -1,13 +1,18 @@
 "use client";
 
 // /register/toc?bookId=xxx
-// 서재의 특정 책에 목차 사진을 찍어서 → Vision → AI → BookPart[] 저장.
-// 등록 직후 분기 + 길게누름 메뉴 모두 여기로.
+// 카메라 → 크롭 → blobs 모이면 즉시 status="extracting" 으로 바꾸고 서재로 복귀.
+// /api/classify-toc 호출은 fire-and-forget — 응답 오면 store 의 updateBook 으로 갱신.
+//
+// 사용자는 LibraryCard 의 진행률 게이지 + extractionStep 라벨로 분석 진행 인지.
 
-import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useBooksStore } from "@/store/booksStore";
 import TocCaptureFlow from "@/components/scan/TocCaptureFlow";
+import {
+  clearExtractionStep,
+  clearStatusField,
+} from "@/lib/registerBookInBackground";
 import type { BookPart } from "@/types/book";
 
 export default function RegisterTocPage() {
@@ -18,48 +23,34 @@ export default function RegisterTocPage() {
   const book = useBooksStore((s) => s.registered.find((b) => b.id === bookId));
   const updateBook = useBooksStore((s) => s.updateBook);
 
-  const [busy, setBusy] = useState(false);
-  const [busyMsg, setBusyMsg] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-
-  // Vision + AI 파이프라인 호출 — 한 방에 처리.
+  // 카메라 → 크롭 → blobs 완성. 여기서부터 즉시 서재 이동.
+  // fetch 는 fire-and-forget — Promise 가 살아있는 한 unmount 돼도 진행됨.
   const onComplete = async (blobs: Blob[]) => {
-    if (!book) {
-      setError("책을 못 찾았습니다");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      setBusyMsg("AI 가 목차 분석 중\n잠시만요");
-      const fd = new FormData();
-      blobs.forEach((b, i) => {
-        fd.append(`file_${i}`, new File([b], `toc-${i + 1}.jpg`, { type: "image/jpeg" }));
-      });
-      fd.append("totalPages", String(book.totalPages ?? 0));
+    if (!book) return;
 
-      const r = await fetch("/api/classify-toc", { method: "POST", body: fd });
-      const data = await r.json();
-      if (!r.ok || !data.ok) {
-        throw new Error(data.detail || data.error || `HTTP ${r.status}`);
-      }
+    // 1) 즉시 extracting 상태로 — 서재 카드에 진행률 게이지 뜸.
+    await updateBook(bookId, {
+      status: "extracting",
+      extractionStartedAt: new Date().toISOString(),
+      extractionStep: "AI 가 목차 분석 중",
+    });
 
-      const parts = data.parts as BookPart[];
-      const totalPages = data.totalPages || book.totalPages || 0;
+    // 2) FormData 구성 (blob 을 fetch 가 들고 있음 — 컴포넌트 unmount 와 무관).
+    const fd = new FormData();
+    blobs.forEach((b, i) => {
+      fd.append(`file_${i}`, new File([b], `toc-${i + 1}.jpg`, { type: "image/jpeg" }));
+    });
+    fd.append("totalPages", String(book.totalPages ?? 0));
 
-      await updateBook(bookId, {
-        parts,
-        totalPages,
-      });
+    // 3) 백그라운드 호출 — 응답 받으면 store 만 업데이트.
+    void runClassifyInBackground({
+      bookId,
+      fd,
+      fallbackTotalPages: book.totalPages ?? 0,
+    });
 
-      // 서재로 복귀.
-      router.replace("/");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "분석 실패");
-    } finally {
-      setBusy(false);
-      setBusyMsg("");
-    }
+    // 4) 즉시 서재 복귀.
+    router.replace("/");
   };
 
   const onCancel = () => router.replace("/");
@@ -101,25 +92,34 @@ export default function RegisterTocPage() {
         </div>
       </div>
 
-      {error && (
-        <div style={errCard}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>{error}</div>
-          <div style={{ fontSize: 11, opacity: 0.75, lineHeight: 1.5 }}>
-            다시 찍기로 재시도
-            <br />
-            아니면 좌상단 ‹이전 으로 빠져나가기
-          </div>
-        </div>
-      )}
-
-      <TocCaptureFlow
-        onComplete={onComplete}
-        onCancel={onCancel}
-        externalBusy={busy}
-        externalBusyMessage={busyMsg}
-      />
+      <TocCaptureFlow onComplete={onComplete} onCancel={onCancel} />
     </main>
   );
+}
+
+// fire-and-forget — Promise 가 살아있는 동안만 동작. 응답 받으면 store 갱신.
+async function runClassifyInBackground(args: {
+  bookId: string;
+  fd: FormData;
+  fallbackTotalPages: number;
+}) {
+  const { updateBook } = useBooksStore.getState();
+  try {
+    const r = await fetch("/api/classify-toc", { method: "POST", body: args.fd });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      throw new Error(data.detail || data.error || `HTTP ${r.status}`);
+    }
+    const parts = data.parts as BookPart[];
+    const totalPages: number = data.totalPages || args.fallbackTotalPages || 0;
+
+    await updateBook(args.bookId, { parts, totalPages });
+    await clearStatusField(args.bookId);
+  } catch (e) {
+    console.warn("[register/toc] classify failed", e);
+    await updateBook(args.bookId, { status: "failed" });
+    await clearExtractionStep(args.bookId);
+  }
 }
 
 const pageBg: React.CSSProperties = {

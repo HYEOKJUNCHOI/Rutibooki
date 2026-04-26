@@ -388,7 +388,7 @@ function CameraPanel({
             whiteSpace: "nowrap",
           }}
         >
-          가이드 안에 한 페이지를 꽉 차게
+          가이드에 꽉 차게 · 수평으로
         </span>
       </div>
 
@@ -522,13 +522,18 @@ function CameraPanel({
               position: "absolute",
               inset: 0,
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               color: "#fff",
               fontSize: 13,
+              gap: 4,
+              textAlign: "center",
+              lineHeight: 1.5,
             }}
           >
-            카메라 시작 중...
+            <span style={{ opacity: 0.85 }}>카메라 켜는 중</span>
+            <span style={{ fontSize: 11, opacity: 0.55 }}>잠시만요</span>
           </div>
         )}
 
@@ -557,7 +562,15 @@ function CameraPanel({
                 animation: "toc-spin 0.9s linear infinite",
               }}
             />
-            <span>{busyMessage ?? "처리 중..."}</span>
+            <span
+              style={{
+                whiteSpace: "pre-line",
+                textAlign: "center",
+                lineHeight: 1.5,
+              }}
+            >
+              {busyMessage ?? "처리 중..."}
+            </span>
             <style>{`@keyframes toc-spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}

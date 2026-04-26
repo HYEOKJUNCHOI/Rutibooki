@@ -31,7 +31,7 @@ export default function RegisterTocPage() {
     setBusy(true);
     setError(null);
     try {
-      setBusyMsg("AI 가 목차 분석 중...");
+      setBusyMsg("AI 가 목차 분석 중\n잠시만요");
       const fd = new FormData();
       blobs.forEach((b, i) => {
         fd.append(`file_${i}`, new File([b], `toc-${i + 1}.jpg`, { type: "image/jpeg" }));
@@ -103,9 +103,11 @@ export default function RegisterTocPage() {
 
       {error && (
         <div style={errCard}>
-          {error}
-          <div style={{ fontSize: 11, marginTop: 6, opacity: 0.75 }}>
-            다시 찍기로 재시도하거나 ‹이전 으로 빠져나갈 수 있어요.
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{error}</div>
+          <div style={{ fontSize: 11, opacity: 0.75, lineHeight: 1.5 }}>
+            다시 찍기로 재시도
+            <br />
+            아니면 좌상단 ‹이전 으로 빠져나가기
           </div>
         </div>
       )}

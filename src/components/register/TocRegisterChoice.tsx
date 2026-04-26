@@ -55,11 +55,13 @@ export default function TocRegisterChoice({ open, onSkip, onPickPhoto }: Props) 
             fontWeight: 800,
             color: "#E8E8E8",
             textAlign: "center",
-            marginBottom: 4,
+            marginBottom: 6,
             letterSpacing: "-0.4px",
           }}
         >
-          목차도 같이 등록할까요?
+          목차도 같이
+          <br />
+          등록할까요?
         </div>
         <div
           style={{
@@ -68,19 +70,27 @@ export default function TocRegisterChoice({ open, onSkip, onPickPhoto }: Props) 
             textAlign: "center",
             marginBottom: 22,
             letterSpacing: "-0.2px",
-            lineHeight: 1.4,
+            lineHeight: 1.55,
           }}
         >
-          목차가 있어야 진행률·파트별 여정 카드가 살아나요.
+          목차가 있어야
           <br />
-          나중에 길게 눌러서 추가도 가능합니다.
+          진행률·여정 카드가 살아나요
+          <br />
+          <span style={{ color: "#5A5A5A" }}>
+            나중에 길게 눌러서 추가도 OK
+          </span>
         </div>
 
         <button onClick={onPickPhoto} style={primaryCardStyle}>
           <div style={{ fontSize: 28 }}>📷</div>
           <div style={{ flex: 1, textAlign: "left" }}>
             <div style={cardTitle}>사진으로 등록</div>
-            <div style={cardSub}>책 목차 페이지 찍으면 AI 가 자동 분석</div>
+            <div style={cardSub}>
+              목차 페이지 찍기
+              <br />
+              AI 가 알아서 분석
+            </div>
           </div>
           <div style={chevronStyle}>›</div>
         </button>
@@ -89,7 +99,11 @@ export default function TocRegisterChoice({ open, onSkip, onPickPhoto }: Props) 
           <div style={{ fontSize: 28 }}>⏭️</div>
           <div style={{ flex: 1, textAlign: "left" }}>
             <div style={cardTitle}>나중에</div>
-            <div style={cardSub}>지금은 책만 등록하고 끝</div>
+            <div style={cardSub}>
+              일단 책만 등록
+              <br />
+              나중에 추가하기
+            </div>
           </div>
           <div style={chevronStyle}>›</div>
         </button>
@@ -146,6 +160,7 @@ const cardSub: React.CSSProperties = {
   fontSize: 11,
   opacity: 0.7,
   letterSpacing: "-0.2px",
+  lineHeight: 1.5,
 };
 
 const chevronStyle: React.CSSProperties = {

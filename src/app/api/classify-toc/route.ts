@@ -34,6 +34,16 @@ interface OkResp {
   totalPages: number;
   source: "ai" | "fallback_raw";
   pageCount: number;
+  debug: {
+    rawTextPerPage: string[];
+    cleanLines: string[];
+    classifications?: unknown;
+    aiReason?: string;
+    aiUsage?: { promptTokens: number; outputTokens: number };
+    maxTailPage: number;
+    totalPagesIn: number;
+    totalPagesOut: number;
+  };
 }
 
 interface ErrResp {
@@ -81,18 +91,23 @@ export async function POST(req: NextRequest): Promise<NextResponse<OkResp | ErrR
 
   // ── 1) 각 페이지 Vision OCR 병렬 실행 ──
   let allLines: string[] = [];
+  let rawTextPerPage: string[] = [];
   try {
     const perPage = await Promise.all(
       files.map(async (f) => {
         const buf = Buffer.from(await f.arrayBuffer());
         const base64 = buf.toString("base64");
         const r = await visionOcr({ base64 });
-        return r.lines ?? [];
+        return { lines: r.lines ?? [], text: r.text ?? "" };
       }),
     );
-    // 페이지 순서 그대로 줄 합치기 — 목차는 페이지 → 페이지로 자연스럽게 이어짐.
-    allLines = perPage.flat();
+    rawTextPerPage = perPage.map((p) => p.text);
+    allLines = perPage.flatMap((p) => p.lines);
+    console.log(
+      `[classify-toc] vision OK — ${files.length} pages, ${allLines.length} lines`,
+    );
   } catch (e) {
+    console.error("[classify-toc] vision throw", e);
     return NextResponse.json(
       { ok: false, error: "vision_failed", detail: e instanceof Error ? e.message : "" },
       { status: 502 },
@@ -136,20 +151,30 @@ export async function POST(req: NextRequest): Promise<NextResponse<OkResp | ErrR
   const apiKey = process.env.GEMINI_API_KEY ?? "";
   let parts: BookPart[] = [];
   let source: "ai" | "fallback_raw" = "fallback_raw";
+  let aiClassifications: unknown = undefined;
+  let aiReason: string | undefined;
+  let aiUsage: { promptTokens: number; outputTokens: number } | undefined;
+  const totalPagesIn = totalPages;
 
   if (apiKey) {
     try {
       const cls = await classifyTocLines(cleanLines, { apiKey });
+      aiClassifications = cls.classifications;
+      aiReason = cls.reason;
+      aiUsage = cls.usage;
+      console.log(
+        `[classify-toc] AI ok=${cls.ok} count=${cls.classifications.length} reason=${cls.reason ?? "-"} tokens(in/out)=${cls.usage?.promptTokens ?? 0}/${cls.usage?.outputTokens ?? 0}`,
+      );
       if (cls.ok && cls.classifications.length > 0) {
         parts = buildTocTreeFromAI(cleanLines, cls.classifications, { totalPages });
         if (parts.length > 0) source = "ai";
-      } else {
-        console.warn("[classify-toc] AI failed:", cls.reason);
       }
     } catch (e) {
+      aiReason = `throw:${e instanceof Error ? e.message : String(e)}`;
       console.warn("[classify-toc] AI throw:", e);
     }
   } else {
+    aiReason = "no_api_key";
     console.warn("[classify-toc] GEMINI_API_KEY missing — skipping AI");
   }
 
@@ -178,11 +203,25 @@ export async function POST(req: NextRequest): Promise<NextResponse<OkResp | ErrR
     source = "fallback_raw";
   }
 
+  console.log(
+    `[classify-toc] DONE — source=${source} parts=${parts.length} totalPages=${totalPagesIn}→${totalPages}`,
+  );
+
   return NextResponse.json({
     ok: true,
     parts,
     totalPages,
     source,
     pageCount: files.length,
+    debug: {
+      rawTextPerPage,
+      cleanLines,
+      classifications: aiClassifications,
+      aiReason,
+      aiUsage,
+      maxTailPage,
+      totalPagesIn,
+      totalPagesOut: totalPages,
+    },
   });
 }

@@ -110,6 +110,24 @@ async function runClassifyInBackground(args: {
     if (!r.ok || !data.ok) {
       throw new Error(data.detail || data.error || `HTTP ${r.status}`);
     }
+
+    // 디버그 정보를 sessionStorage 에 저장 — /dev/toc-debug?bookId=xxx 에서 조회.
+    if (typeof window !== "undefined" && data.debug) {
+      try {
+        sessionStorage.setItem(
+          `toc-debug:${args.bookId}`,
+          JSON.stringify({
+            ...data.debug,
+            source: data.source,
+            parts: data.parts,
+            ts: Date.now(),
+          }),
+        );
+      } catch (e) {
+        console.warn("[register/toc] debug store fail", e);
+      }
+    }
+
     const parts = data.parts as BookPart[];
     const totalPages: number = data.totalPages || args.fallbackTotalPages || 0;
 

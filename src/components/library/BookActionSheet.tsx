@@ -4,15 +4,21 @@ import { useEffect, useState } from "react";
 import { Book } from "@/types/book";
 
 // 서재 카드 길게눌러 뜨는 액션 시트.
-// [2026-04-22] 삭제 외 기능(목차 재등록/바코드 메타 업데이트) 전부 제거 — 롱프레스는 삭제 전용.
+// [2026-04-27] 사진으로 목차 등록 부활 — Vision OCR + AI 분류 파이프라인 활용.
 
 interface Props {
   book: Book | null;
   onClose: () => void;
   onDelete: (book: Book) => Promise<void> | void;
+  onPickTocPhoto?: (book: Book) => void;
 }
 
-export default function BookActionSheet({ book, onClose, onDelete }: Props) {
+export default function BookActionSheet({
+  book,
+  onClose,
+  onDelete,
+  onPickTocPhoto,
+}: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -113,6 +119,12 @@ export default function BookActionSheet({ book, onClose, onDelete }: Props) {
           )}
         </div>
 
+        {onPickTocPhoto && (
+          <SheetButton
+            label="📷 사진으로 목차 등록"
+            onClick={() => onPickTocPhoto(book)}
+          />
+        )}
         <SheetButton
           label={
             deleting

@@ -16,7 +16,7 @@ import ConfirmCoverSheet, {
 } from "@/components/register/ConfirmCoverSheet";
 import { Book } from "@/types/book";
 import { normalizeAuthor } from "@/utils/normalizeAuthor";
-import { startBackgroundRegistration } from "@/lib/registerBookInBackground";
+import TocRegisterChoice from "@/components/register/TocRegisterChoice";
 
 // 새 홈 = 서재(Library). 책 선택 시 /book/[id] 로 진입.
 // 정렬: lastOpenedAt 최신순 → 오늘 이어 읽을 책이 자연스럽게 첫 자리.
@@ -45,8 +45,10 @@ export default function LibraryHome() {
   const [confirmData, setConfirmData] = useState<ConfirmData | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // 길게눌러 뜨는 액션 시트 — [2026-04-22] 삭제 전용으로 축소.
+  // 길게눌러 뜨는 액션 시트 — 삭제 + 사진으로 목차 등록.
   const [sheetBook, setSheetBook] = useState<Book | null>(null);
+  // 바코드 등록 직후 띄울 "목차도 등록할래요?" 시트. 책 ID 가 들어있을 때 노출.
+  const [tocChoiceForBookId, setTocChoiceForBookId] = useState<string | null>(null);
   const isRegistered = (id: string) => registered.some((b) => b.id === id);
 
   // 서재 = 등록된 책 그대로.
@@ -114,19 +116,19 @@ export default function LibraryHome() {
     }
   };
 
-  // 확인 → 즉시 shell 등록 + 백그라운드 목차 파이프라인.
+  // 확인 → 즉시 shell 등록. 백그라운드 교보 스크래핑 제거 — 목차는 사용자 선택으로.
+  // 등록 직후 TocRegisterChoice 시트가 떠서 [나중에/사진으로] 분기.
   const handleConfirmRegister = async () => {
     if (!confirmData) return;
     const id = `book-${Date.now()}`;
     const shell: Book = {
       id,
-      title: confirmData.title || "분석 중…",
+      title: confirmData.title,
       author: confirmData.author,
       searchQuery: confirmData.isbn13,
       totalPages: confirmData.itemPage ?? 0,
       parts: [],
       registeredAt: new Date().toISOString(),
-      status: "extracting",
       isbn13: confirmData.isbn13,
     };
     if (confirmData.cover) shell.coverUrl = confirmData.cover;
@@ -134,7 +136,7 @@ export default function LibraryHome() {
 
     setConfirmData(null);
     await addBook(shell);
-    startBackgroundRegistration({ shellId: id, isbn13: confirmData.isbn13 });
+    setTocChoiceForBookId(id);
   };
 
   return (
@@ -314,6 +316,21 @@ export default function LibraryHome() {
         onClose={() => setSheetBook(null)}
         onDelete={async (b) => {
           await removeBook(b.id);
+        }}
+        onPickTocPhoto={(b) => {
+          setSheetBook(null);
+          router.push(`/register/toc?bookId=${b.id}`);
+        }}
+      />
+
+      {/* 바코드 등록 직후 — 목차 등록 분기 시트. */}
+      <TocRegisterChoice
+        open={tocChoiceForBookId !== null}
+        onSkip={() => setTocChoiceForBookId(null)}
+        onPickPhoto={() => {
+          const id = tocChoiceForBookId;
+          setTocChoiceForBookId(null);
+          if (id) router.push(`/register/toc?bookId=${id}`);
         }}
       />
     </main>
